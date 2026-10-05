@@ -1,0 +1,157 @@
+<title>StardustLang para Edge Gallery</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;600;700&display=swap">
+<style>
+  /* Layout: una columna de lectura; arriba la URL a importar (con QR para el teléfono), debajo los pasos y qué hace la skill. */
+  :root{
+    --bg:#f3f1ec; --surface:#ffffff; --surface-2:#f7f5f0; --ink:#1d2027; --muted:#5d6370; --line:#e0dcd2;
+    --accent:#a8641a; --accent-ink:#fff8ee; --ok:#2f7d57; --code-bg:#eef3ef; --code-ink:#1f6b55;
+    --display:"JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    --body:"IBM Plex Sans", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#0f1318; --surface:#161b22; --surface-2:#1c222b; --ink:#e6e9ee; --muted:#9aa2ad; --line:#2a313b;
+      --accent:#e0a458; --accent-ink:#241704; --ok:#5db98b; --code-bg:#0b1914; --code-ink:#7ee0c8; color-scheme:dark;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#0f1318; --surface:#161b22; --surface-2:#1c222b; --ink:#e6e9ee; --muted:#9aa2ad; --line:#2a313b;
+    --accent:#e0a458; --accent-ink:#241704; --ok:#5db98b; --code-bg:#0b1914; --code-ink:#7ee0c8; color-scheme:dark;
+  }
+  *{ box-sizing:border-box; }
+  body{ background:var(--bg); color:var(--ink); font-family:var(--body); font-size:16px; line-height:1.6; padding-inline:16px; }
+  .wrap{ max-width:760px; margin:0 auto; padding-block:clamp(28px,6vw,64px) 56px; display:flex; flex-direction:column; gap:36px; }
+  .eyebrow{ font-family:var(--display); font-size:12px; letter-spacing:.2em; text-transform:uppercase; color:var(--accent); font-weight:600; }
+  h1{ font-family:var(--display); font-size:clamp(28px,6vw,42px); line-height:1.1; letter-spacing:-.02em; margin:.3em 0 .35em; text-wrap:balance; font-weight:700; }
+  h2{ font-family:var(--display); font-size:18px; margin:0 0 14px; letter-spacing:-.01em; text-wrap:balance; }
+  p{ margin:0; max-width:65ch; }
+  .lede{ color:var(--muted); font-size:17px; }
+  code, .mono{ font-family:var(--display); font-size:.9em; }
+  p code, li code{ background:var(--surface-2); border:1px solid var(--line); border-radius:5px; padding:0 5px; }
+
+  /* La URL a importar: el único bloque destacado de la página. */
+  .install{ display:grid; grid-template-columns:minmax(0,1fr) auto; gap:20px; align-items:center;
+    background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:20px; }
+  @media (max-width:560px){ .install{ grid-template-columns:1fr; } .qr-wrap{ justify-self:start; } }
+  .install .label{ font-family:var(--display); font-size:12px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted); }
+  .url-row{ display:flex; gap:8px; margin-top:8px; min-width:0; }
+  #skill-url{ flex:1; min-width:0; font-family:var(--display); font-size:14px; color:var(--code-ink); background:var(--code-bg);
+    border:1px solid var(--line); border-radius:9px; padding:10px 12px; overflow-x:auto; white-space:nowrap; user-select:all; }
+  .btn{ flex:none; font-family:var(--display); font-weight:600; font-size:14px; color:var(--accent-ink); background:var(--accent);
+    border:0; border-radius:9px; padding:10px 16px; cursor:pointer; }
+  .btn:focus-visible{ outline:2px solid var(--accent); outline-offset:3px; }
+  .install .note{ margin-top:10px; font-size:13.5px; color:var(--muted); }
+  .qr-wrap{ display:flex; flex-direction:column; align-items:center; gap:6px; }
+  #qr{ background:#ffffff; padding:10px; border-radius:10px; border:1px solid var(--line); line-height:0; }
+  #qr img, #qr canvas{ width:132px; height:132px; display:block; }
+  .qr-wrap span{ font-size:12px; color:var(--muted); }
+
+  ol.steps{ list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:14px; counter-reset:s; }
+  ol.steps li{ display:grid; grid-template-columns:28px minmax(0,1fr); gap:12px; counter-increment:s; }
+  ol.steps li::before{ content:counter(s); font-family:var(--display); font-weight:700; font-size:13px; color:var(--accent);
+    width:28px; height:28px; border:1.5px solid var(--accent); border-radius:50%; display:grid; place-items:center; }
+
+  .loop{ display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; }
+  @media (max-width:620px){ .loop{ grid-template-columns:1fr; } }
+  .loop div{ border-top:2px solid var(--line); padding-top:10px; }
+  .loop b{ font-family:var(--display); font-size:14px; display:block; margin-bottom:4px; }
+  .loop p{ font-size:14.5px; color:var(--muted); }
+  .verdict{ font-family:var(--display); font-size:12.5px; }
+  .verdict .ok{ color:var(--ok); } .verdict .bad{ color:var(--accent); }
+
+  .prompts{ display:flex; flex-direction:column; gap:8px; }
+  .prompts q{ display:block; quotes:none; background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:10px 14px; font-size:15px; }
+
+  .files{ overflow-x:auto; }
+  .files table{ border-collapse:collapse; width:100%; font-size:14px; }
+  .files td{ padding:8px 10px 8px 0; border-bottom:1px solid var(--line); vertical-align:top; }
+  .files td:first-child{ font-family:var(--display); font-size:13px; white-space:nowrap; color:var(--code-ink); }
+  .foot{ font-size:13.5px; color:var(--muted); }
+  a{ color:var(--accent); }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Skill · Google AI Edge Gallery</div>
+    <h1>StardustLang en tu teléfono</h1>
+    <p class="lede">Un modelo en el dispositivo, como Gemma-4-E2B-it, escribe apps en StardustLang, las valida con la StardustVM real
+      y te las enseña funcionando dentro del chat. Sin servidor: la máquina virtual corre en el propio teléfono.</p>
+  </header>
+
+  <section class="install" aria-label="URL de la skill">
+    <div style="min-width:0">
+      <div class="label">URL para «Load skill from URL»</div>
+      <div class="url-row">
+        <div id="skill-url">__SKILL_URL__</div>
+        <button class="btn" id="copy" type="button">Copiar</button>
+      </div>
+      <p class="note" id="copy-note">Apunta a la carpeta de la skill; dentro están <code>SKILL.md</code>, <code>scripts/</code> y <code>assets/</code>.</p>
+    </div>
+    <div class="qr-wrap"><div id="qr" aria-label="Código QR con la URL de la skill"></div><span>Escanéalo con el teléfono</span></div>
+  </section>
+
+  <section>
+    <h2>Instalarla</h2>
+    <ol class="steps">
+      <li><p>Abre <b>AI Edge Gallery</b>, entra en <b>Agent Skills</b> y elige el modelo (Gemma-4-E2B-it).</p></li>
+      <li><p>Toca el chip <b>Skills</b> para abrir el gestor y pulsa <b>(+)</b>.</p></li>
+      <li><p>Elige <b>Load skill from URL</b> y pega la URL de arriba.</p></li>
+      <li><p>Pídele una app. La skill se activa sola cuando la petición habla de StardustLang.</p></li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>Qué pasa cuando le pides una app</h2>
+    <div class="loop">
+      <div><b>1 · Escribe</b><p>El modelo genera el programa: actores, mensajes y una vista de widgets, todo en JSON.</p></div>
+      <div><b>2 · Valida</b><p>Llama a <code>run_js</code>. La StardustVM comprueba el esquema, lo arranca y pulsa cada botón en una VM limpia.</p></div>
+      <div><b>3 · Corrige</b><p>Si algo falla, recibe la ruta exacta y la forma correcta, y lo vuelve a intentar (hasta 4 veces).</p></div>
+    </div>
+    <p class="verdict" style="margin-top:14px">La respuesta empieza por <span class="ok">VÁLIDO</span> (y la app aparece en el chat) o por <span class="bad">INVÁLIDO</span> (con hasta 5 errores localizados).</p>
+  </section>
+
+  <section>
+    <h2>Pruébala con</h2>
+    <div class="prompts">
+      <q>Crea en StardustLang una lista de la compra donde pueda añadir productos.</q>
+      <q>Haz una app StardustLang que convierta grados Celsius a Fahrenheit.</q>
+      <q>Escribe un contador en StardustLang con botones +1, −1 y reiniciar.</q>
+    </div>
+  </section>
+
+  <section class="files">
+    <h2>Archivos de la skill</h2>
+    <table>
+      <tr><td>SKILL.md</td><td>Instrucciones para el modelo: pasos, el subconjunto del lenguaje, reglas y dos ejemplos validados.</td></tr>
+      <tr><td>scripts/index.html</td><td>El validador oculto que llama <code>run_js</code>: la StardustVM compilada a WebAssembly.</td></tr>
+      <tr><td>assets/webview.html</td><td>La app ya validada, funcionando en el chat.</td></tr>
+    </table>
+  </section>
+
+  <p class="foot">Código y documentación del lenguaje: <a href="https://github.com/quirpie/stardustLang">github.com/quirpie/stardustLang</a>.</p>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script>
+  const url = document.getElementById("skill-url").textContent.trim();
+  // Mientras no haya un hosting real para la carpeta, la URL queda pendiente.
+  if (url.startsWith("__")) {
+    document.getElementById("skill-url").textContent = "pendiente de publicar";
+    document.getElementById("copy").hidden = true;
+    document.getElementById("copy-note").textContent = "La carpeta de la skill aún no está en un hosting público. Mientras tanto, impórtala desde el teléfono con «Import local skill».";
+  }
+  if (url.startsWith("__")) document.querySelector(".qr-wrap").hidden = true;
+  else try { new QRCode(document.getElementById("qr"), { text: url, width: 264, height: 264, correctLevel: QRCode.CorrectLevel.M }); }
+  catch (_) { document.querySelector(".qr-wrap").hidden = true; }
+  document.getElementById("copy").addEventListener("click", async () => {
+    const note = document.getElementById("copy-note");
+    try { await navigator.clipboard.writeText(url); note.textContent = "Copiada. Pégala en «Load skill from URL»."; }
+    catch (_) {
+      const r = document.createRange(); r.selectNodeContents(document.getElementById("skill-url"));
+      const s = getSelection(); s.removeAllRanges(); s.addRange(r);
+      note.textContent = "Seleccionada: cópiala con Ctrl+C o mantén pulsado en el teléfono.";
+    }
+  });
+</script>

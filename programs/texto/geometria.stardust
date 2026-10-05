@@ -1,0 +1,7 @@
+app geometria
+export Areas
+grant 'cap-geo-123': Areas
+
+actor Areas:
+  on p(base: int, altura: int) from cliente:
+    send(cliente, {area: p.base * p.altura / 2})

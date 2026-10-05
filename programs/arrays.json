@@ -1,0 +1,71 @@
+{
+  "program": "arrays-demo",
+  "entry": "Actor_IO",
+  "actors": [
+    {
+      "name": "Actor_IO",
+      "capabilities": ["IO_STREAM"],
+      "on_start": [
+        { "op": "IO_STREAM", "mode": "out", "prompt": "== Demo de arrays: serie de Fibonacci ==" },
+        { "op": "IO_STREAM", "mode": "in", "target": "n", "prompt": "¿Cuántos términos? " },
+        { "op": "SEND", "to": "Actor_Data", "value": { "var": "n" } }
+      ],
+      "on_message": {
+        "bind": "r",
+        "body": [
+          { "op": "IO_STREAM", "mode": "out", "prompt": "Serie   : ", "value": { "field": "serie", "from": { "var": "r" } } },
+          { "op": "IO_STREAM", "mode": "out", "prompt": "Longitud: ", "value": { "field": "longitud", "from": { "var": "r" } } },
+          { "op": "IO_STREAM", "mode": "out", "prompt": "Suma    : ", "value": { "field": "suma", "from": { "var": "r" } } },
+          { "op": "IO_STREAM", "mode": "out", "prompt": "Primero : ", "value": { "field": "primero", "from": { "var": "r" } } },
+          { "op": "IO_STREAM", "mode": "out", "prompt": "Último  : ", "value": { "field": "ultimo", "from": { "var": "r" } } }
+        ]
+      }
+    },
+    {
+      "name": "Actor_Data",
+      "capabilities": [],
+      "on_message": {
+        "bind": "n",
+        "body": [
+          { "op": "DEF_VAR", "name": "serie", "value": { "list": [] } },
+          { "op": "DEF_VAR", "name": "a", "value": 0 },
+          { "op": "DEF_VAR", "name": "b", "value": 1 },
+          { "op": "DEF_VAR", "name": "i", "value": 0 },
+          { "op": "DEF_VAR", "name": "cont", "value": false },
+          { "op": "COMPARE", "target": "cont", "operator": "<", "left": { "var": "i" }, "right": { "var": "n" } },
+          {
+            "op": "LOOP", "cond": { "var": "cont" },
+            "body": [
+              { "op": "APPEND", "target": "serie", "value": { "var": "a" } },
+              { "op": "MATH", "target": "c", "operator": "+", "left": { "var": "a" }, "right": { "var": "b" } },
+              { "op": "ASSIGN", "target": "a", "value": { "var": "b" } },
+              { "op": "ASSIGN", "target": "b", "value": { "var": "c" } },
+              { "op": "MATH", "target": "i", "operator": "+", "left": { "var": "i" }, "right": 1 },
+              { "op": "COMPARE", "target": "cont", "operator": "<", "left": { "var": "i" }, "right": { "var": "n" } }
+            ]
+          },
+          { "op": "DEF_VAR", "name": "suma", "value": 0 },
+          {
+            "op": "FOREACH", "in": { "var": "serie" }, "var": "x",
+            "body": [
+              { "op": "MATH", "target": "suma", "operator": "+", "left": { "var": "suma" }, "right": { "var": "x" } }
+            ]
+          },
+          { "op": "DEF_VAR", "name": "longitud", "value": { "len": { "var": "serie" } } },
+          { "op": "DEF_VAR", "name": "primero", "value": { "at": 0, "of": { "var": "serie" } } },
+          { "op": "DEF_VAR", "name": "ultimo", "value": { "at": -1, "of": { "var": "serie" } } },
+          {
+            "op": "SEND", "to": "Actor_IO",
+            "value": { "record": {
+              "serie": { "var": "serie" },
+              "longitud": { "var": "longitud" },
+              "suma": { "var": "suma" },
+              "primero": { "var": "primero" },
+              "ultimo": { "var": "ultimo" }
+            } }
+          }
+        ]
+      }
+    }
+  ]
+}

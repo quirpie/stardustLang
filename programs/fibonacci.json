@@ -1,0 +1,57 @@
+{
+  "program": "nano-poc-fibonacci",
+  "entry": "Actor_IO",
+  "actors": [
+    {
+      "name": "Actor_IO",
+      "capabilities": ["IO_STREAM"],
+      "on_start": [
+        { "op": "IO_STREAM", "mode": "out", "prompt": "== Nano POC Stardust :: Fibonacci ==" },
+        { "op": "IO_STREAM", "mode": "in", "target": "limit", "prompt": "¿Cuántos términos de Fibonacci? " },
+        { "op": "SEND", "to": "Actor_Calculo", "value": { "var": "limit" } }
+      ],
+      "on_message": {
+        "bind": "result",
+        "body": [
+          { "op": "IO_STREAM", "mode": "out", "prompt": "Serie de Fibonacci: ", "value": { "var": "result" } }
+        ]
+      }
+    },
+    {
+      "name": "Actor_Calculo",
+      "capabilities": [],
+      "on_message": {
+        "bind": "limit",
+        "body": [
+          { "op": "DEF_VAR", "name": "a", "value": 0 },
+          { "op": "DEF_VAR", "name": "b", "value": 1 },
+          { "op": "DEF_VAR", "name": "i", "value": 0 },
+          { "op": "DEF_VAR", "name": "series", "value": "" },
+          { "op": "DEF_VAR", "name": "cont", "value": false },
+          { "op": "COMPARE", "target": "cont", "operator": "<", "left": { "var": "i" }, "right": { "var": "limit" } },
+          {
+            "op": "LOOP",
+            "cond": { "var": "cont" },
+            "body": [
+              { "op": "COMPARE", "target": "notfirst", "operator": ">", "left": { "var": "i" }, "right": 0 },
+              {
+                "op": "IF_COND",
+                "cond": { "var": "notfirst" },
+                "then": [
+                  { "op": "MATH", "target": "series", "operator": "+", "left": { "var": "series" }, "right": ", " }
+                ]
+              },
+              { "op": "MATH", "target": "series", "operator": "+", "left": { "var": "series" }, "right": { "var": "a" } },
+              { "op": "MATH", "target": "c", "operator": "+", "left": { "var": "a" }, "right": { "var": "b" } },
+              { "op": "ASSIGN", "target": "a", "value": { "var": "b" } },
+              { "op": "ASSIGN", "target": "b", "value": { "var": "c" } },
+              { "op": "MATH", "target": "i", "operator": "+", "left": { "var": "i" }, "right": 1 },
+              { "op": "COMPARE", "target": "cont", "operator": "<", "left": { "var": "i" }, "right": { "var": "limit" } }
+            ]
+          },
+          { "op": "SEND", "to": "Actor_IO", "value": { "var": "series" } }
+        ]
+      }
+    }
+  ]
+}

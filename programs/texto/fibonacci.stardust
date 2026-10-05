@@ -1,0 +1,19 @@
+app nano-poc-fibonacci
+
+actor IO:
+  start:
+    print('== Nano POC Stardust :: Fibonacci ==')
+    limit = input('¿Cuántos términos de Fibonacci? ')
+    send(Calculo, limit)
+  on result:
+    print('Serie de Fibonacci: ', result)
+
+actor Calculo:
+  on limit:
+    a = 0
+    b = 1
+    serie = []
+    while len(serie) < limit:
+      serie.append(a)
+      a, b = b, a + b
+    send(IO, ', '.join(serie))

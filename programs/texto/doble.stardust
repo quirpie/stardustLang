@@ -1,0 +1,12 @@
+app doble
+
+actor UI:
+  start:
+    r = 'Escribe un número'
+  on m:
+    r = number(m) * 2
+  view:
+    column:
+      label(r)
+      input('Doble')
+      button('Cero', send='0')

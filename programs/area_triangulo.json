@@ -1,0 +1,138 @@
+{
+"program": "AreaTriangulo",
+"entry": "Interface",
+"actors": [
+{
+"name": "Interface",
+"capabilities": [
+"IO_STREAM"
+],
+"on_start": [
+{
+"op": "IO_STREAM",
+"mode": "in",
+"target": "base",
+"prompt": "Ingresa la base del triangulo:"
+},
+{
+"op": "SEND",
+"to": "Calculator",
+"value": {
+"var": "base"
+}
+},
+{
+"op": "IO_STREAM",
+"mode": "in",
+"target": "altura",
+"prompt": "Ingresa la altura del triangulo:"
+},
+{
+"op": "SEND",
+"to": "Calculator",
+"value": {
+"var": "altura"
+}
+}
+],
+"on_message": {
+"bind": "area",
+"body": [
+{
+"op": "IO_STREAM",
+"mode": "out",
+"target": "dummy_out",
+"value": {
+"var": "area"
+},
+"prompt": "El area del triangulo es: "
+}
+]
+}
+},
+{
+"name": "Calculator",
+"capabilities": [],
+"on_start": [
+{
+"op": "DEF_VAR",
+"name": "step",
+"value": 0
+},
+{
+"op": "DEF_VAR",
+"name": "base_val",
+"value": 0
+}
+],
+"on_message": {
+"bind": "msg",
+"body": [
+{
+"op": "COMPARE",
+"target": "is_step_0",
+"operator": "==",
+"left": {
+"var": "step"
+},
+"right": 0
+},
+{
+"op": "IF_COND",
+"cond": {
+"var": "is_step_0"
+},
+"then": [
+{
+"op": "ASSIGN",
+"target": "base_val",
+"value": {
+"var": "msg"
+}
+},
+{
+"op": "ASSIGN",
+"target": "step",
+"value": 1
+}
+],
+"else": [
+{
+"op": "MATH",
+"target": "temp",
+"operator": "*",
+"left": {
+"var": "base_val"
+},
+"right": {
+"var": "msg"
+}
+},
+{
+"op": "MATH",
+"target": "area",
+"operator": "/",
+"left": {
+"var": "temp"
+},
+"right": 2
+},
+{
+"op": "SEND",
+"to": "Interface",
+"value": {
+"var": "area"
+}
+},
+{
+"op": "ASSIGN",
+"target": "step",
+"value": 0
+}
+]
+}
+]
+}
+}
+]
+}

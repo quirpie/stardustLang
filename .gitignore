@@ -1,0 +1,29 @@
+# Artefactos de compilación de Rust
+/target
+
+# Salida de wasm-bindgen (se regenera con web/build-*.sh)
+/web/pkg
+
+# Demos web generadas: embeben el .wasm y se reconstruyen con web/build-*.sh.
+# Se versionan las plantillas (*.template.html), los scripts y web/runtime.js.
+/web/*.html
+!/web/renderer.html
+!/web/*.template.html
+
+# Sandbox de ficheros de la capacidad FILE (host nativo)
+stardust-data/
+/web/**/stardust-data/
+
+# Config local de la herramienta y del SO
+.claude/
+*.swp
+.DS_Store
+
+# Skill de AI Edge Gallery ensamblada (skills/build-skill.sh)
+/dist
+
+# Datos locales de stardust-server (STARDUST_DATA, por defecto ./data) y SQLite
+/data/
+*.db
+*.db-wal
+*.db-shm

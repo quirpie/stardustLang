@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>StardustVM · Actor remoto</title>
+<!--
+  web/remote-demo.template.html — Un actor del navegador habla con otro nodo.
+
+  El actor `Cliente` (programs/remoto_ui.json) hace SEND a
+  actor://127.0.0.1:9945/Saludador, un actor que corre en un proceso nativo
+  (`stardust programs/saludador.json --serve 127.0.0.1:9945`). La VM WASM encola el
+  envío; web/runtime.js (pumpNet) lo entrega como POST firmado con Ed25519 y la
+  respuesta del Saludador vuelve al Cliente como on_message {kind:"saludo",…}.
+  Si el nodo no responde, llega {kind:"remote_error",…}: un mensaje manejable.
+
+  Marcadores con doble guion bajo (web/build-remote-demo.sh): PROGRAM, GLUE, RUNTIME, WASM
+-->
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --panel-2:#1b222c; --ink:#e6edf3; --muted:#8b949e;
+    --line:#2a313c; --accent:#e0a458; --accent-ink:#241704; --lcd:#7ee0c8; --lcd-bg:#0a1712;
+    --danger:#f2685f; --ok:#5db98b;
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Code", Menlo, Consolas, monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --radius:14px;
+  }
+  @media (prefers-color-scheme: light){
+    :root:not([data-theme="dark"]){
+      --bg:#eef1f5; --panel:#ffffff; --panel-2:#f4f6f9; --ink:#1a2029; --muted:#5a6472;
+      --line:#dce1e8; --accent:#b5761f; --accent-ink:#fff6ea; --lcd:#0f7a63; --lcd-bg:#e7f4ee;
+      --danger:#c14338; --ok:#2f8a5f;
+    }
+  }
+  :root[data-theme="light"]{
+    --bg:#eef1f5; --panel:#ffffff; --panel-2:#f4f6f9; --ink:#1a2029; --muted:#5a6472;
+    --line:#dce1e8; --accent:#b5761f; --accent-ink:#fff6ea; --lcd:#0f7a63; --lcd-bg:#e7f4ee;
+    --danger:#c14338; --ok:#2f8a5f;
+  }
+  *{ box-sizing:border-box; }
+  body{ margin:0; background:var(--bg); color:var(--ink); font-family:var(--mono); line-height:1.5; -webkit-font-smoothing:antialiased;
+    background-image:radial-gradient(1200px 600px at 50% -10%, color-mix(in srgb, var(--accent) 8%, transparent), transparent 60%); }
+  .wrap{ max-width:1080px; margin:0 auto; padding:clamp(20px,4vw,44px) clamp(16px,3vw,32px) 56px; }
+  header.head{ display:flex; align-items:flex-start; justify-content:space-between; gap:16px; margin-bottom:24px; }
+  .eyebrow{ font-size:12px; letter-spacing:.22em; text-transform:uppercase; color:var(--accent); font-weight:600; }
+  h1{ font-size:clamp(22px,3.4vw,30px); margin:.3em 0 .2em; letter-spacing:-.01em; font-weight:650; }
+  .sub{ color:var(--muted); font-family:var(--sans); font-size:14px; max-width:66ch; }
+  code{ font-family:var(--mono); color:var(--ink); background:var(--panel-2); padding:1px 6px; border-radius:6px; border:1px solid var(--line); font-size:12px; }
+  .theme-btn{ flex:none; font-family:var(--mono); font-size:12px; color:var(--muted); background:var(--panel); border:1px solid var(--line);
+    border-radius:999px; padding:8px 14px; cursor:pointer; }
+  .theme-btn:hover{ color:var(--ink); border-color:var(--accent); }
+
+  /* Dos nodos y el cable entre ellos */
+  .topo{ display:grid; grid-template-columns:minmax(0,1fr) 120px minmax(0,1fr); align-items:stretch; margin-bottom:20px; }
+  @media (max-width:820px){ .topo{ grid-template-columns:1fr; } .wire{ min-height:56px; } .wire::before{ left:50%; right:auto; top:0; bottom:0; width:2px; height:auto; } }
+  .node{ background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); padding:18px; min-width:0; }
+  .node .kind{ font-size:11px; letter-spacing:.18em; text-transform:uppercase; color:var(--muted); }
+  .node .nm{ font-weight:650; font-size:16px; margin:2px 0 10px; }
+  .node .addr{ color:var(--muted); font-size:12px; overflow-wrap:anywhere; }
+  .wire{ position:relative; display:grid; place-items:center; color:var(--muted); font-size:11px; text-align:center; }
+  .wire::before{ content:""; position:absolute; left:0; right:0; top:50%; height:2px; background:var(--line); }
+  .wire span{ position:relative; background:var(--bg); padding:2px 8px; border-radius:6px; }
+  .wire.live::before{ background:var(--accent); }
+  .wire.live span{ color:var(--accent); }
+
+  form{ display:flex; gap:8px; margin-top:4px; }
+  input{ flex:1; min-width:0; font:inherit; font-size:14px; color:var(--ink); background:var(--panel-2); border:1px solid var(--line); border-radius:10px; padding:10px 12px; }
+  input:focus-visible, button:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
+  .primary{ flex:none; font:inherit; font-weight:650; color:var(--accent-ink); background:var(--accent); border:0; border-radius:10px; padding:10px 16px; cursor:pointer; }
+  .primary:disabled{ opacity:.6; cursor:progress; }
+  .reply{ margin-top:14px; background:var(--lcd-bg); color:var(--lcd); border:1px solid var(--line); border-radius:10px; padding:12px 14px; min-height:3.2em; overflow-wrap:anywhere; }
+  .reply.err{ color:var(--danger); background:color-mix(in srgb, var(--danger) 8%, var(--panel)); }
+  .estado{ margin-top:8px; font-size:12px; color:var(--muted); }
+  .steps{ margin:0; padding-left:18px; font-family:var(--sans); font-size:13px; color:var(--muted); }
+  .steps li{ margin:4px 0; }
+
+  .panel{ background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); }
+  .panel-title{ font-size:11px; letter-spacing:.18em; text-transform:uppercase; color:var(--muted); padding:12px 16px 0; }
+  #bus{ height:240px; overflow:auto; padding:8px 16px 14px; font-size:12px; }
+  #bus .line{ padding:2px 0; white-space:pre-wrap; word-break:break-word; }
+  #bus .line.remote{ color:var(--accent); }
+  #bus .line.danger{ color:var(--danger); }
+  #bus .empty{ color:var(--muted); font-family:var(--sans); font-style:italic; }
+  .foot{ margin-top:22px; color:var(--muted); font-family:var(--sans); font-size:13px; max-width:72ch; }
+</style>
+</head>
+<body>
+<script type="application/json" id="program">
+__PROGRAM__
+</script>
+
+<div class="wrap">
+  <header class="head">
+    <div>
+      <div class="eyebrow">StardustVM · actores distribuidos</div>
+      <h1>Un actor del navegador habla con otro nodo</h1>
+      <div class="sub">La misma dirección <code>actor://</code> funciona en el host nativo (ureq) y en el navegador (fetch).
+        Cada mensaje viaja firmado con Ed25519; el nodo receptor solo acepta claves autorizadas.</div>
+    </div>
+    <button class="theme-btn" id="theme" type="button">tema</button>
+  </header>
+
+  <div class="topo">
+    <section class="node" aria-label="Nodo navegador">
+      <div class="kind">Este navegador · WASM</div>
+      <div class="nm">Cliente</div>
+      <form id="form">
+        <label for="nombre" hidden>Nombre</label>
+        <input id="nombre" required value="Stardust" autocomplete="off">
+        <button class="primary" id="go" type="submit">Saludar</button>
+      </form>
+      <div class="reply" id="reply">—</div>
+      <div class="estado" id="estado">listo para llamar</div>
+    </section>
+    <div class="wire" id="wire"><span>POST firmado</span></div>
+    <section class="node" aria-label="Nodo remoto">
+      <div class="kind">Proceso nativo · --serve</div>
+      <div class="nm">Saludador</div>
+      <div class="addr" id="addr"></div>
+      <ol class="steps">
+        <li>Arranca el nodo:<br><code>stardust programs/saludador.json --serve 127.0.0.1:9945</code></li>
+        <li>Sirve <code>web/</code> por HTTP y abre esta página.</li>
+        <li>Pulsa «Saludar». Sin nodo, el error llega como mensaje.</li>
+      </ol>
+    </section>
+  </div>
+
+  <section class="panel" aria-label="Bus">
+    <div class="panel-title">Bus de mensajes</div>
+    <div id="bus"><div class="empty">Sin mensajes todavía.</div></div>
+  </section>
+
+  <p class="foot">El llamante no necesita su propio servidor: la respuesta del actor remoto viaja en la respuesta HTTP del POST
+    y la VM la reinyecta como <code>on_message</code>.</p>
+</div>
+
+<script type="module">
+/*__GLUE__*/
+
+/*__RUNTIME__*/
+
+const $=(id)=>document.getElementById(id);
+const prefersDark=()=>matchMedia("(prefers-color-scheme: dark)").matches;
+let theme=null; try { theme=localStorage.getItem("stardust-theme"); } catch(_){}
+function applyTheme(){ if (theme) document.documentElement.dataset.theme=theme; else delete document.documentElement.dataset.theme;
+  $("theme").textContent=(theme ? theme==="dark" : prefersDark()) ? "☾ oscuro" : "☀ claro"; }
+applyTheme();
+$("theme").addEventListener("click",()=>{ theme=(theme ? theme==="dark" : prefersDark()) ? "light" : "dark";
+  try { localStorage.setItem("stardust-theme", theme); } catch(_){} applyTheme(); });
+
+const source=$("program").textContent.trim();
+const prog=JSON.parse(source);
+const ACTOR=prog.entry || "Cliente";
+$("addr").textContent=(prog.net_allow || []).map(p=>p+"Saludador").join(" · ");
+
+let failed=false;
+function trace(line){
+  const bus=$("bus"); if (bus.querySelector(".empty")) bus.replaceChildren();
+  const d=document.createElement("div"); d.className="line"; d.textContent=line;
+  if (/FALLO|denegad|remote_error|error(?!: null)/i.test(line)){ d.classList.add("danger"); if (/FALLO/.test(line)) failed=true; }
+  else if (/actor:\/\/|saludo/i.test(line)) d.classList.add("remote");
+  bus.appendChild(d); bus.scrollTop=bus.scrollHeight;
+}
+
+function show(engine){
+  const mem=(JSON.parse(engine.state_json())[ACTOR] || {}).memory || {};
+  const reply=$("reply");
+  if (failed){ reply.className="reply err"; reply.textContent="Fallo aislado en el actor (ver el bus)."; $("estado").textContent="el actor se reinició"; return; }
+  $("estado").textContent=mem.estado || "listo para llamar";
+  reply.className="reply"+(mem.estado==="error" ? " err" : "");
+  reply.textContent=mem.saludo || (mem.estado ? "…" : "—");
+}
+
+await __wbg_init({ module_or_path: b64ToBytes("__WASM__") });
+const rt=createStardustRuntime({ source, rootEl:document.createElement("div"), onTrace:trace, mirror:async (engine)=>show(engine) });
+await rt.start();
+
+$("form").addEventListener("submit", async (e)=>{
+  e.preventDefault();
+  failed=false;
+  $("go").disabled=true; $("wire").classList.add("live");
+  try { await rt.fire({ to:ACTOR, send:{ kind:"pedir", nombre:$("nombre").value.trim() } }); }
+  catch (err){ trace("error del host: "+(err && err.message ? err.message : err)); }
+  finally { $("go").disabled=false; $("wire").classList.remove("live"); show(rt.engine); }
+});
+</script>
+</body>
+</html>

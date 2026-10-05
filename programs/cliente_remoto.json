@@ -1,0 +1,21 @@
+{
+  "program": "cliente-remoto",
+  "entry": "Cliente",
+  "net_allow": ["actor://127.0.0.1:9945"],
+  "actors": [
+    {
+      "name": "Cliente",
+      "capabilities": ["NET", "IO_STREAM"],
+      "on_start": [
+        { "op": "IO_STREAM", "mode": "out", "prompt": "Pidiendo un saludo al nodo remoto (actor://127.0.0.1:9945/Saludador)…" },
+        { "op": "SEND", "to": "actor://127.0.0.1:9945/Saludador", "value": { "record": { "nombre": "Stardust" } } }
+      ],
+      "on_message": {
+        "bind": "resp",
+        "body": [
+          { "op": "IO_STREAM", "mode": "out", "prompt": "respuesta › ", "value": { "field": "texto", "from": { "var": "resp" } } }
+        ]
+      }
+    }
+  ]
+}

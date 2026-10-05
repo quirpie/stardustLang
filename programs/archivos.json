@@ -1,0 +1,39 @@
+{
+  "program": "sistema-de-archivos",
+  "entry": "Disco",
+  "actors": [
+    {
+      "name": "Disco",
+      "capabilities": ["IO_STREAM", "FILE"],
+      "on_start": [
+        { "op": "IO_STREAM", "mode": "out", "prompt": "== Sistema de archivos (texto + binario) ==" },
+
+        { "op": "FILE_WRITE", "path": "notas/hola.txt", "value": "Hola, sistema de archivos" },
+        { "op": "FILE_WRITE", "path": "bin/logo.dat", "value": { "bytes": "AAECAwT/" } },
+        { "op": "FILE_APPEND", "path": "notas/hola.txt", "value": " (anexado)" },
+
+        { "op": "FILE_LIST", "into": "todo" },
+        { "op": "IO_STREAM", "mode": "out", "prompt": "ls ->                 : ", "value": { "var": "todo" } },
+
+        { "op": "FILE_READ", "path": "notas/hola.txt", "into": "texto" },
+        { "op": "IO_STREAM", "mode": "out", "prompt": "leer texto            : ", "value": { "var": "texto" } },
+
+        { "op": "FILE_READ", "path": "bin/logo.dat", "into": "blob", "as": "bytes" },
+        { "op": "DEF_VAR", "name": "n", "value": { "len": { "var": "blob" } } },
+        { "op": "HASH", "value": { "var": "blob" }, "into": "huella" },
+        { "op": "IO_STREAM", "mode": "out", "prompt": "leer binario (bytes)  : ", "value": { "var": "n" } },
+        { "op": "IO_STREAM", "mode": "out", "prompt": "SHA-256 del binario   : ", "value": { "var": "huella" } },
+
+        { "op": "FILE_EXISTS", "path": "notas/hola.txt", "into": "existe" },
+        { "op": "IO_STREAM", "mode": "out", "prompt": "existe hola.txt?      : ", "value": { "var": "existe" } },
+
+        { "op": "FILE_DELETE", "path": "notas/hola.txt" },
+        { "op": "FILE_EXISTS", "path": "notas/hola.txt", "into": "existe2" },
+        { "op": "IO_STREAM", "mode": "out", "prompt": "tras borrar, existe?  : ", "value": { "var": "existe2" } },
+
+        { "op": "FILE_LIST", "path": "bin", "into": "solo_bin" },
+        { "op": "IO_STREAM", "mode": "out", "prompt": "ls bin/               : ", "value": { "var": "solo_bin" } }
+      ]
+    }
+  ]
+}

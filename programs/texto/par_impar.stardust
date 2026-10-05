@@ -1,0 +1,19 @@
+app par-impar
+
+actor UI:
+  start:
+    texto = 'Escribe un número'
+  on m:
+    texto = m
+  view:
+    column:
+      label(texto)
+      input('Comprobar', placeholder='Número', to=Logica)
+
+actor Logica:
+  on m:
+    n = number(m)
+    if n % 2 == 0:
+      send(UI, f'{n} es par')
+    else:
+      send(UI, f'{n} es impar')

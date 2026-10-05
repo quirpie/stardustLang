@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="es">
+<head><meta charset="utf-8"><title>StardustLang · validador</title></head>
+<!--
+  skills/stardustlang/scripts/index.template.html — Ejecutor oculto de la skill.
+
+  AI Edge Gallery carga esta página en un webview oculto y llama a
+  window.ai_edge_gallery_get_result(data) cuando el modelo usa run_js. Aquí corre
+  la StardustVM real (WASM embebido): valida el programa con check_program(), lo
+  arranca y pulsa cada botón/input en una VM nueva para cazar fallos de
+  ejecución. Devuelve un texto corto que empieza por "VÁLIDO" o "INVÁLIDO" — lo
+  lee un modelo pequeño, así que va al grano y con rutas exactas — y, si es
+  válido, un webview (assets/webview.html) con la app funcionando.
+
+  Marcadores con doble guion bajo (skills/build-skill.sh): GLUE, RUNTIME, WASM
+-->
+<body>
+<script>
+  // El app puede llamar antes de que termine de cargar el módulo WASM: la
+  // función existe desde el primer momento y espera a que la VM esté lista.
+  window.__stardustReady = new Promise((resolve, reject) => { window.__stardustResolve = resolve; window.__stardustReject = reject; });
+  window['ai_edge_gallery_get_result'] = async (data) => {
+    try {
+      const stardust = await window.__stardustReady;
+      return JSON.stringify(stardust.handle(data));
+    } catch (e) {
+      console.error(e);
+      return JSON.stringify({ error: "La skill de StardustLang falló: " + (e && e.message ? e.message : e) });
+    }
+  };
+</script>
+<script type="module">
+/*__GLUE__*/
+
+/*__RUNTIME__*/
+
+// Cada token cuenta: Gemma on-device trabaja con una ventana de contexto pequeña
+// (Gallery aborta con "Prefill input length exceeds available state entries").
+const MAX_ERRORS = 3;     // un modelo de 2B corrige mejor pocos puntos a la vez
+const MAX_EVENTS = 15;    // widgets interactivos que se prueban
+const TEST_HOST = { input: "7", name: "prueba.txt", bytes: new Uint8Array([104, 111, 108, 97]) };
+const isFault = (line) => /FALLO|descartado/.test(line);
+
+// Quita un bloque ``` … ``` (con o sin lenguaje) si el modelo lo envolvió.
+function stripFences(text) {
+  let t = String(text).replace(/\r\n/g, "\n");
+  const fence = t.match(/```[a-zA-Z]*\n([\s\S]*?)```/);
+  if (fence) t = fence[1];
+  return t.replace(/^\s*\n/, "").replace(/\s+$/, "") + "\n";
+}
+
+// Saca el programa de `data`, se lo pase el modelo como lo pase. Devuelve
+//   { stardust }  texto .stardust (el formato principal), o
+//   { src }    la IR en JSON (formato anterior: {"program":{…}} o el objeto directo).
+function extractProgram(data) {
+  let d = data;
+  if (typeof d === "string") {
+    try { d = JSON.parse(d); } catch (_) { return { stardust: stripFences(d) }; }   // el código suelto
+  }
+  if (d && typeof d === "object") {
+    if (Array.isArray(d.actors)) return { src: JSON.stringify(d, null, 1) };
+    let p = d.code ?? d.program ?? d.source ?? d.stardust;
+    if (typeof p === "string") {
+      const s = stripFences(p);
+      if (!s.trimStart().startsWith("{")) return { stardust: s };
+      try { p = JSON.parse(s); } catch (_) { return { src: s }; }                // JSON roto: que el checker diga dónde
+    }
+    if (p && typeof p === "object") return { src: JSON.stringify(p, null, 1) };
+  }
+  return { missing: true };
+}
+
+function fmtIssue(i, n) {
+  // Solo la pista si es corta y de una línea; los consejos largos gastan contexto.
+  const hint = i.hint && i.hint.length <= 70 && !i.hint.includes("\n") ? ` Ej: ${i.hint}` : "";
+  const where = i.line ? `línea ${i.line}` : i.path;
+  return `${n}. ${where}: ${i.message}.${hint}`;
+}
+
+// Recorre el árbol de UI ya resuelto y junta los widgets que emiten eventos.
+function interactive(node, out = []) {
+  if (!node || out.length >= MAX_EVENTS) return out;
+  if (node.event) {
+    const what = node.kind === "button" ? `el botón «${node.label}»` : `el ${node.kind} «${node.label || node.placeholder || ""}»`;
+    out.push({ what, event: node.event });
+  }
+  for (const c of node.children || []) interactive(c, out);
+  return out;
+}
+
+// Arranca el programa y prueba cada interacción en una VM limpia.
+function dryRun(src) {
+  const faults = [];
+  let engine;
+  try { engine = new Engine(src); } catch (e) { return { faults: ["la StardustVM no pudo cargarlo: " + e], tested: 0, hasView: false }; }
+  for (const line of JSON.parse(engine.boot_trace())) if (isFault(line)) faults.push("on_start: " + line.replace(/^FALLO AISLADO en on_start de '[^']*': /, ""));
+  let tree = null;
+  try { tree = JSON.parse(engine.render()); } catch (e) { faults.push("al dibujar la vista: " + e); }
+  engine.free();
+
+  const events = interactive(tree);
+  for (const { what, event } of events) {
+    const e = new Engine(src);
+    try {
+      const payload = substitute(event.send, TEST_HOST);
+      const res = JSON.parse(e.event(event.to || "", JSON.stringify(payload)));
+      for (const line of res.trace || []) if (isFault(line)) faults.push(`al usar ${what} con "${TEST_HOST.input}": ${line.replace(/^FALLO AISLADO en '[^']*': /, "")}`);
+      JSON.parse(e.render());
+    } catch (err) {
+      faults.push(`al usar ${what}: ${err && err.message ? err.message : err}`);
+    } finally { e.free(); }
+  }
+  return { faults, tested: events.length, hasView: !!tree };
+}
+
+function b64url(text) {
+  return bytesToB64(new TextEncoder().encode(text)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function handle(data) {
+  const got = extractProgram(data);
+  if (got.missing) {
+    return { result: "INVÁLIDO. Falta el programa: data debe ser {\"code\": \"<el programa>\"}." };
+  }
+  // .stardust → se compila a la IR (errores por línea); la IR en JSON se valida tal cual.
+  const report = got.stardust !== undefined ? JSON.parse(compile_program(got.stardust)) : JSON.parse(check_program(got.src));
+  if (!report.ok) {
+    const shown = report.errors.slice(0, MAX_ERRORS);
+    return { result: "INVÁLIDO. Corrige y llama otra vez a run_js:\n" + shown.map((i, k) => fmtIssue(i, k + 1)).join("\n") };
+  }
+  if (got.stardust !== undefined) got.src = JSON.stringify(report.ir);
+
+  const run = dryRun(got.src);
+  if (run.faults.length) {
+    const shown = run.faults.slice(0, MAX_ERRORS);
+    // Los fallos vienen en términos de la IR (MATH, COMPARE); el modelo escribe texto.
+    const plain = (f) => {
+      let t = f.replace(/\b(MATH|COMPARE) '([^']+)'/g, "'$2'");
+      if (/no soporta|error de tipo/.test(t)) t += " (¿falta convertir el texto con number(m)?)";
+      return t;
+    };
+    return { result: "INVÁLIDO al ejecutar. Corrige y llama otra vez a run_js:\n" + shown.map((f, k) => `${k + 1}. ${plain(f)}`).join("\n") };
+  }
+
+  // Respuesta mínima: la app y su código ya se ven en el webview, así que el
+  // modelo no tiene que repetir el código, que es lo que más contexto gasta.
+  const out = { result: run.hasView
+    ? "VÁLIDO. La app ya se muestra al usuario con su código. Responde solo con una frase sobre qué hace."
+    : "VÁLIDO, pero no tiene view, así que no hay app que mostrar. Muestra el código al usuario." };
+  if (run.hasView) {
+    // El webview recibe el texto .stardust (más corto y es lo que el usuario quiere ver) y lo compila él.
+    const q = got.stardust !== undefined ? "s=" + b64url(got.stardust) : "p=" + b64url(JSON.stringify(JSON.parse(got.src)));
+    out.webview = { url: "webview.html?" + q, aspectRatio: 0.75 };
+  }
+  return out;
+}
+
+try {
+  await __wbg_init({ module_or_path: b64ToBytes("__WASM__") });
+  window.__stardustResolve({ handle });
+} catch (e) {
+  window.__stardustReject(e);
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>StardustVM · Persistencia</title>
+<!--
+  web/persist.template.html — Persistencia ORTOGONAL en el navegador.
+
+  El programa (programs/contador_ui.json) no sabe que persiste: no tiene la
+  capacidad FILE. Es el host quien, tras cada mensaje, serializa la memoria de
+  los actores con engine.snapshot() (JSON etiquetado, sin pérdidas: Date y Bytes
+  conservan su tipo) a localStorage, y la restaura con engine.restore() al cargar.
+
+  Marcadores con doble guion bajo (web/build-persist.sh): PROGRAM, GLUE, RUNTIME, WASM
+-->
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --panel-2:#1b222c; --ink:#e6edf3; --muted:#8b949e;
+    --line:#2a313c; --accent:#e0a458; --accent-ink:#241704; --lcd:#7ee0c8; --lcd-bg:#0a1712;
+    --danger:#f2685f; --ok:#5db98b;
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Code", Menlo, Consolas, monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --radius:14px;
+  }
+  @media (prefers-color-scheme: light){
+    :root:not([data-theme="dark"]){
+      --bg:#eef1f5; --panel:#ffffff; --panel-2:#f4f6f9; --ink:#1a2029; --muted:#5a6472;
+      --line:#dce1e8; --accent:#b5761f; --accent-ink:#fff6ea; --lcd:#0f7a63; --lcd-bg:#e7f4ee;
+      --danger:#c14338; --ok:#2f8a5f;
+    }
+  }
+  :root[data-theme="light"]{
+    --bg:#eef1f5; --panel:#ffffff; --panel-2:#f4f6f9; --ink:#1a2029; --muted:#5a6472;
+    --line:#dce1e8; --accent:#b5761f; --accent-ink:#fff6ea; --lcd:#0f7a63; --lcd-bg:#e7f4ee;
+    --danger:#c14338; --ok:#2f8a5f;
+  }
+  *{ box-sizing:border-box; }
+  body{ margin:0; background:var(--bg); color:var(--ink); font-family:var(--mono); line-height:1.5; -webkit-font-smoothing:antialiased;
+    background-image:radial-gradient(1200px 600px at 50% -10%, color-mix(in srgb, var(--accent) 8%, transparent), transparent 60%); }
+  .wrap{ max-width:980px; margin:0 auto; padding:clamp(20px,4vw,44px) clamp(16px,3vw,32px) 56px; }
+  header.head{ display:flex; align-items:flex-start; justify-content:space-between; gap:16px; margin-bottom:24px; }
+  .eyebrow{ font-size:12px; letter-spacing:.22em; text-transform:uppercase; color:var(--accent); font-weight:600; }
+  h1{ font-size:clamp(22px,3.4vw,30px); margin:.3em 0 .2em; letter-spacing:-.01em; font-weight:650; }
+  .sub{ color:var(--muted); font-family:var(--sans); font-size:14px; max-width:62ch; }
+  .theme-btn{ flex:none; font-family:var(--mono); font-size:12px; color:var(--muted); background:var(--panel); border:1px solid var(--line);
+    border-radius:999px; padding:8px 14px; cursor:pointer; }
+  .theme-btn:hover{ color:var(--ink); border-color:var(--accent); }
+  .device{ display:grid; grid-template-columns:minmax(0,340px) minmax(0,1fr); gap:20px; align-items:start; }
+  @media (max-width:760px){ .device{ grid-template-columns:1fr; } }
+  .panel{ background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); min-width:0; }
+  .pad{ padding:18px; }
+  .panel-title{ font-size:11px; letter-spacing:.18em; text-transform:uppercase; color:var(--muted); margin:0 0 12px; }
+  .status{ display:flex; align-items:center; gap:8px; margin-top:14px; font-size:12px; color:var(--muted); font-family:var(--sans); }
+  .dot{ width:8px; height:8px; border-radius:50%; background:var(--ok); flex:none; }
+  .dot.off{ background:var(--danger); }
+  .ghost{ margin-top:12px; width:100%; font:inherit; font-size:13px; padding:9px 12px; background:transparent; color:var(--danger);
+    border:1px solid var(--line); border-radius:10px; cursor:pointer; }
+  .ghost:hover{ border-color:var(--danger); }
+  .tabs{ display:flex; gap:4px; padding:6px; border-bottom:1px solid var(--line); }
+  .tab{ font-family:var(--mono); font-size:12px; color:var(--muted); background:transparent; border:0; border-radius:8px; padding:7px 12px; cursor:pointer; }
+  .tab[aria-selected="true"]{ color:var(--ink); background:var(--panel-2); }
+  .pane{ padding:14px 16px; height:340px; overflow:auto; font-size:12.5px; }
+  .pane[hidden]{ display:none; }
+  .pane pre{ margin:0; white-space:pre-wrap; word-break:break-word; }
+  .bus .line{ padding:2px 0; white-space:pre-wrap; word-break:break-word; }
+  .bus .line.host{ color:var(--accent); }
+  .bus .line.danger{ color:var(--danger); }
+  .bus .empty{ color:var(--muted); font-family:var(--sans); font-style:italic; }
+  .foot{ margin-top:22px; color:var(--muted); font-family:var(--sans); font-size:13px; max-width:72ch; }
+  .foot code{ font-family:var(--mono); color:var(--ink); background:var(--panel); padding:1px 6px; border-radius:6px; border:1px solid var(--line); font-size:12px; }
+  .err{ color:var(--danger); white-space:pre-wrap; font-size:13px; }
+
+  /* Widgets (web/runtime.js) */
+  .w-col{ display:flex; flex-direction:column; gap:12px; }
+  .w-row{ display:flex; flex-wrap:wrap; gap:10px; }
+  .w-grid{ display:grid; gap:10px; }
+  .w-label{ overflow-wrap:anywhere; }
+  .w-col > .w-label:first-child{ background:var(--lcd-bg); color:var(--lcd); border:1px solid var(--line); border-radius:10px;
+    font-size:clamp(40px,9vw,64px); text-align:center; padding:14px; font-variant-numeric:tabular-nums; }
+  .w-button{ font-family:var(--mono); font-size:16px; color:var(--ink); background:var(--panel-2); border:1px solid var(--line);
+    border-radius:12px; min-height:52px; padding:0 14px; cursor:pointer; transition:transform .05s ease, border-color .15s; }
+  .w-button:hover{ border-color:color-mix(in srgb, var(--accent) 55%, var(--line)); }
+  .w-button:active{ transform:translateY(2px); }
+  .w-button:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
+  .w-empty{ color:var(--muted); font-style:italic; }
+  @media (prefers-reduced-motion:reduce){ .w-button:active{ transform:none; } }
+</style>
+</head>
+<body>
+<script type="application/json" id="program">
+__PROGRAM__
+</script>
+
+<div class="wrap">
+  <header class="head">
+    <div>
+      <div class="eyebrow">StardustVM · persistencia web</div>
+      <h1>Un contador que sobrevive a la recarga</h1>
+      <div class="sub">Pulsa <b>+1</b> unas veces y recarga la página. El programa no tiene capacidad <code>FILE</code>:
+        el host guarda la memoria de los actores con <code>engine.snapshot()</code> y la restaura al cargar.</div>
+    </div>
+    <button class="theme-btn" id="theme" type="button">tema</button>
+  </header>
+
+  <main class="device">
+    <section class="panel pad">
+      <div class="panel-title">App</div>
+      <div id="app"></div>
+      <div class="status"><span class="dot" id="dot"></span><span id="status">…</span></div>
+      <button class="ghost" id="forget" type="button">Olvidar estado guardado</button>
+    </section>
+    <section class="panel">
+      <div class="tabs" role="tablist">
+        <button class="tab" role="tab" aria-selected="true" data-pane="bus">bus</button>
+        <button class="tab" role="tab" aria-selected="false" data-pane="snap">snapshot</button>
+      </div>
+      <div class="pane bus" id="bus"><div class="empty">Sin mensajes todavía.</div></div>
+      <div class="pane" id="snap" hidden><pre></pre></div>
+    </section>
+  </main>
+
+  <p class="foot">Persistencia ortogonal: el estado se guarda <em>fuera</em> del programa, como en un sistema de imagen.
+    El códec es etiquetado (<code>{"$type":"date",…}</code>), así que una <code>Date</code> o unos <code>Bytes</code> vuelven con su tipo,
+    cosa que <code>JSON.stringify</code> plano no garantiza.</p>
+</div>
+
+<script type="module">
+/*__GLUE__*/
+
+/*__RUNTIME__*/
+
+const $=(id)=>document.getElementById(id);
+const prefersDark=()=>matchMedia("(prefers-color-scheme: dark)").matches;
+let theme=null; try { theme=localStorage.getItem("stardust-theme"); } catch(_){}
+function applyTheme(){ if (theme) document.documentElement.dataset.theme=theme; else delete document.documentElement.dataset.theme;
+  $("theme").textContent=(theme ? theme==="dark" : prefersDark()) ? "☾ oscuro" : "☀ claro"; }
+applyTheme();
+$("theme").addEventListener("click",()=>{ theme=(theme ? theme==="dark" : prefersDark()) ? "light" : "dark";
+  try { localStorage.setItem("stardust-theme", theme); } catch(_){} applyTheme(); });
+document.querySelectorAll(".tab").forEach(t=>t.addEventListener("click",()=>{
+  document.querySelectorAll(".tab").forEach(x=>x.setAttribute("aria-selected", String(x===t)));
+  document.querySelectorAll(".pane").forEach(p=>p.hidden = p.id!==t.dataset.pane);
+}));
+
+function trace(line, cls){
+  const bus=$("bus"); if (bus.querySelector(".empty")) bus.replaceChildren();
+  const d=document.createElement("div"); d.className="line"+(cls ? " "+cls : ""); d.textContent=line;
+  if (/FALLO|error(?!: null)/i.test(line)) d.classList.add("danger");
+  bus.appendChild(d); bus.scrollTop=bus.scrollHeight;
+}
+function setStatus(text, ok){ $("status").textContent=text; $("dot").classList.toggle("off", !ok); }
+function showSnap(snap){ $("snap").firstElementChild.textContent = snap ? JSON.stringify(JSON.parse(snap), null, 2) : "(nada guardado)"; }
+
+const source=$("program").textContent.trim();
+const KEY="stardust-persist:"+(JSON.parse(source).program || "app");
+const store={
+  get(){ try { return localStorage.getItem(KEY); } catch(_){ return null; } },
+  set(v){ try { localStorage.setItem(KEY, v); return true; } catch(_){ return false; } },
+  drop(){ try { localStorage.removeItem(KEY); } catch(_){} },
+};
+
+try {
+  await __wbg_init({ module_or_path: b64ToBytes("__WASM__") });
+  const rt=createStardustRuntime({
+    source, rootEl:$("app"), onTrace:trace,
+    // Tras cada mensaje: snapshot etiquetado → localStorage.
+    mirror: async (engine)=>{
+      const snap=engine.snapshot();
+      if (store.set(snap)){ trace("host :: snapshot guardado ("+snap.length+" B)", "host"); setStatus("guardado en localStorage", true); }
+      else setStatus("localStorage no disponible: no persiste", false);
+      showSnap(snap);
+    },
+  });
+  const saved=store.get();
+  if (saved){
+    rt.engine.restore(saved);
+    trace("host :: estado restaurado desde localStorage", "host");
+    setStatus("estado restaurado de una sesión anterior", true);
+  } else setStatus("sin estado previo: arranque limpio", true);
+  showSnap(saved);
+  await rt.start();
+
+  $("forget").addEventListener("click",()=>{ store.drop(); location.reload(); });
+} catch (e){
+  const d=document.createElement("div"); d.className="err"; d.textContent="No se pudo cargar: "+(e && e.message ? e.message : e);
+  $("app").replaceChildren(d);
+}
+</script>
+</body>
+</html>

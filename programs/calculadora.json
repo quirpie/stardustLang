@@ -1,0 +1,151 @@
+{
+  "program": "calculadora-ui",
+  "entry": "Actor_UI",
+  "actors": [
+    {
+      "name": "Actor_UI",
+      "capabilities": ["RENDER"],
+      "on_start": [
+        { "op": "DEF_VAR", "name": "display", "value": 0 }
+      ],
+      "on_message": {
+        "bind": "value",
+        "body": [
+          { "op": "ASSIGN", "target": "display", "value": { "var": "value" } }
+        ]
+      },
+      "view": {
+        "type": "column",
+        "children": [
+          { "type": "label", "text": { "var": "display" } },
+          {
+            "type": "grid",
+            "columns": 4,
+            "children": [
+              { "type": "button", "label": "7", "send": 7, "to": "Actor_Calculo" },
+              { "type": "button", "label": "8", "send": 8, "to": "Actor_Calculo" },
+              { "type": "button", "label": "9", "send": 9, "to": "Actor_Calculo" },
+              { "type": "button", "label": "/", "send": "/", "to": "Actor_Calculo" },
+              { "type": "button", "label": "4", "send": 4, "to": "Actor_Calculo" },
+              { "type": "button", "label": "5", "send": 5, "to": "Actor_Calculo" },
+              { "type": "button", "label": "6", "send": 6, "to": "Actor_Calculo" },
+              { "type": "button", "label": "*", "send": "*", "to": "Actor_Calculo" },
+              { "type": "button", "label": "1", "send": 1, "to": "Actor_Calculo" },
+              { "type": "button", "label": "2", "send": 2, "to": "Actor_Calculo" },
+              { "type": "button", "label": "3", "send": 3, "to": "Actor_Calculo" },
+              { "type": "button", "label": "-", "send": "-", "to": "Actor_Calculo" },
+              { "type": "button", "label": "C", "send": "C", "to": "Actor_Calculo" },
+              { "type": "button", "label": "0", "send": 0, "to": "Actor_Calculo" },
+              { "type": "button", "label": "=", "send": "=", "to": "Actor_Calculo" },
+              { "type": "button", "label": "+", "send": "+", "to": "Actor_Calculo" }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "Actor_Calculo",
+      "capabilities": [],
+      "on_start": [
+        { "op": "DEF_VAR", "name": "entry", "value": 0 },
+        { "op": "DEF_VAR", "name": "acc", "value": 0 },
+        { "op": "DEF_VAR", "name": "op", "value": "" }
+      ],
+      "on_message": {
+        "bind": "tok",
+        "body": [
+          { "op": "DEF_VAR", "name": "is_op", "value": false },
+          { "op": "COMPARE", "target": "t1", "operator": "==", "left": { "var": "tok" }, "right": "+" },
+          { "op": "IF_COND", "cond": { "var": "t1" }, "then": [ { "op": "ASSIGN", "target": "is_op", "value": true } ] },
+          { "op": "COMPARE", "target": "t2", "operator": "==", "left": { "var": "tok" }, "right": "-" },
+          { "op": "IF_COND", "cond": { "var": "t2" }, "then": [ { "op": "ASSIGN", "target": "is_op", "value": true } ] },
+          { "op": "COMPARE", "target": "t3", "operator": "==", "left": { "var": "tok" }, "right": "*" },
+          { "op": "IF_COND", "cond": { "var": "t3" }, "then": [ { "op": "ASSIGN", "target": "is_op", "value": true } ] },
+          { "op": "COMPARE", "target": "t4", "operator": "==", "left": { "var": "tok" }, "right": "/" },
+          { "op": "IF_COND", "cond": { "var": "t4" }, "then": [ { "op": "ASSIGN", "target": "is_op", "value": true } ] },
+
+          { "op": "COMPARE", "target": "is_clear", "operator": "==", "left": { "var": "tok" }, "right": "C" },
+          { "op": "COMPARE", "target": "is_equal", "operator": "==", "left": { "var": "tok" }, "right": "=" },
+
+          { "op": "DEF_VAR", "name": "out", "value": { "var": "entry" } },
+
+          {
+            "op": "IF_COND",
+            "cond": { "var": "is_clear" },
+            "then": [
+              { "op": "ASSIGN", "target": "entry", "value": 0 },
+              { "op": "ASSIGN", "target": "acc", "value": 0 },
+              { "op": "ASSIGN", "target": "op", "value": "" },
+              { "op": "ASSIGN", "target": "out", "value": 0 }
+            ],
+            "else": [
+              {
+                "op": "IF_COND",
+                "cond": { "var": "is_equal" },
+                "then": [
+                  { "op": "COMPARE", "target": "hasop", "operator": "!=", "left": { "var": "op" }, "right": "" },
+                  {
+                    "op": "IF_COND",
+                    "cond": { "var": "hasop" },
+                    "then": [
+                      { "op": "COMPARE", "target": "ap", "operator": "==", "left": { "var": "op" }, "right": "+" },
+                      { "op": "IF_COND", "cond": { "var": "ap" }, "then": [ { "op": "MATH", "target": "acc", "operator": "+", "left": { "var": "acc" }, "right": { "var": "entry" } } ] },
+                      { "op": "COMPARE", "target": "am", "operator": "==", "left": { "var": "op" }, "right": "-" },
+                      { "op": "IF_COND", "cond": { "var": "am" }, "then": [ { "op": "MATH", "target": "acc", "operator": "-", "left": { "var": "acc" }, "right": { "var": "entry" } } ] },
+                      { "op": "COMPARE", "target": "ax", "operator": "==", "left": { "var": "op" }, "right": "*" },
+                      { "op": "IF_COND", "cond": { "var": "ax" }, "then": [ { "op": "MATH", "target": "acc", "operator": "*", "left": { "var": "acc" }, "right": { "var": "entry" } } ] },
+                      { "op": "COMPARE", "target": "ad", "operator": "==", "left": { "var": "op" }, "right": "/" },
+                      { "op": "IF_COND", "cond": { "var": "ad" }, "then": [
+                          { "op": "COMPARE", "target": "nz", "operator": "!=", "left": { "var": "entry" }, "right": 0 },
+                          { "op": "IF_COND", "cond": { "var": "nz" }, "then": [ { "op": "MATH", "target": "acc", "operator": "/", "left": { "var": "acc" }, "right": { "var": "entry" } } ] }
+                      ] },
+                      { "op": "ASSIGN", "target": "out", "value": { "var": "acc" } },
+                      { "op": "ASSIGN", "target": "op", "value": "" },
+                      { "op": "ASSIGN", "target": "entry", "value": 0 }
+                    ]
+                  }
+                ],
+                "else": [
+                  {
+                    "op": "IF_COND",
+                    "cond": { "var": "is_op" },
+                    "then": [
+                      { "op": "COMPARE", "target": "noop", "operator": "==", "left": { "var": "op" }, "right": "" },
+                      {
+                        "op": "IF_COND",
+                        "cond": { "var": "noop" },
+                        "then": [ { "op": "ASSIGN", "target": "acc", "value": { "var": "entry" } } ],
+                        "else": [
+                          { "op": "COMPARE", "target": "ap", "operator": "==", "left": { "var": "op" }, "right": "+" },
+                          { "op": "IF_COND", "cond": { "var": "ap" }, "then": [ { "op": "MATH", "target": "acc", "operator": "+", "left": { "var": "acc" }, "right": { "var": "entry" } } ] },
+                          { "op": "COMPARE", "target": "am", "operator": "==", "left": { "var": "op" }, "right": "-" },
+                          { "op": "IF_COND", "cond": { "var": "am" }, "then": [ { "op": "MATH", "target": "acc", "operator": "-", "left": { "var": "acc" }, "right": { "var": "entry" } } ] },
+                          { "op": "COMPARE", "target": "ax", "operator": "==", "left": { "var": "op" }, "right": "*" },
+                          { "op": "IF_COND", "cond": { "var": "ax" }, "then": [ { "op": "MATH", "target": "acc", "operator": "*", "left": { "var": "acc" }, "right": { "var": "entry" } } ] },
+                          { "op": "COMPARE", "target": "ad", "operator": "==", "left": { "var": "op" }, "right": "/" },
+                          { "op": "IF_COND", "cond": { "var": "ad" }, "then": [
+                              { "op": "COMPARE", "target": "nz", "operator": "!=", "left": { "var": "entry" }, "right": 0 },
+                              { "op": "IF_COND", "cond": { "var": "nz" }, "then": [ { "op": "MATH", "target": "acc", "operator": "/", "left": { "var": "acc" }, "right": { "var": "entry" } } ] }
+                          ] }
+                        ]
+                      },
+                      { "op": "ASSIGN", "target": "out", "value": { "var": "acc" } },
+                      { "op": "ASSIGN", "target": "op", "value": { "var": "tok" } },
+                      { "op": "ASSIGN", "target": "entry", "value": 0 }
+                    ],
+                    "else": [
+                      { "op": "MATH", "target": "entry", "operator": "*", "left": { "var": "entry" }, "right": 10 },
+                      { "op": "MATH", "target": "entry", "operator": "+", "left": { "var": "entry" }, "right": { "var": "tok" } },
+                      { "op": "ASSIGN", "target": "out", "value": { "var": "entry" } }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          { "op": "SEND", "to": "Actor_UI", "value": { "var": "out" } }
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,34 @@
+{
+  "program": "nano-poc-fibonacci-FALLO",
+  "entry": "Actor_IO",
+  "actors": [
+    {
+      "name": "Actor_IO",
+      "capabilities": ["IO_STREAM"],
+      "on_start": [
+        { "op": "IO_STREAM", "mode": "out", "prompt": "== Nano POC Stardust :: Fibonacci (motor con bug) ==" },
+        { "op": "IO_STREAM", "mode": "in", "target": "limit", "prompt": "¿Cuántos términos de Fibonacci? " },
+        { "op": "IO_STREAM", "mode": "out", "prompt": "Actor_IO: petición enviada al motor. La UI sigue operativa pase lo que pase." },
+        { "op": "SEND", "to": "Actor_Calculo", "value": { "var": "limit" } }
+      ],
+      "on_message": {
+        "bind": "result",
+        "body": [
+          { "op": "IO_STREAM", "mode": "out", "prompt": "Serie de Fibonacci: ", "value": { "var": "result" } }
+        ]
+      }
+    },
+    {
+      "name": "Actor_Calculo",
+      "capabilities": [],
+      "on_message": {
+        "bind": "limit",
+        "body": [
+          { "op": "DEF_VAR", "name": "cero", "value": 0 },
+          { "op": "MATH", "target": "bug", "operator": "/", "left": { "var": "limit" }, "right": { "var": "cero" } },
+          { "op": "SEND", "to": "Actor_IO", "value": { "var": "bug" } }
+        ]
+      }
+    }
+  ]
+}

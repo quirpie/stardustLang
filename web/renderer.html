@@ -1,0 +1,603 @@
+<meta charset="utf-8">
+<title>StardustVM · Renderer web del UI-IR</title>
+
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --panel-2:#1b222c; --ink:#e6edf3; --muted:#8b949e;
+    --line:#2a313c; --accent:#e0a458; --accent-ink:#241704; --lcd:#7ee0c8; --lcd-bg:#0a1712;
+    --danger:#f2685f; --ok:#5db98b;
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Code", Menlo, Consolas, monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --radius:14px;
+  }
+  @media (prefers-color-scheme: light){
+    :root{
+      --bg:#eef1f5; --panel:#ffffff; --panel-2:#f4f6f9; --ink:#1a2029; --muted:#5a6472;
+      --line:#dce1e8; --accent:#b5761f; --accent-ink:#fff6ea; --lcd:#0f7a63; --lcd-bg:#e7f4ee;
+      --danger:#c14338; --ok:#2f8a5f;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#0d1117; --panel:#161b22; --panel-2:#1b222c; --ink:#e6edf3; --muted:#8b949e;
+    --line:#2a313c; --accent:#e0a458; --accent-ink:#241704; --lcd:#7ee0c8; --lcd-bg:#0a1712;
+    --danger:#f2685f; --ok:#5db98b;
+  }
+  :root[data-theme="light"]{
+    --bg:#eef1f5; --panel:#ffffff; --panel-2:#f4f6f9; --ink:#1a2029; --muted:#5a6472;
+    --line:#dce1e8; --accent:#b5761f; --accent-ink:#fff6ea; --lcd:#0f7a63; --lcd-bg:#e7f4ee;
+    --danger:#c14338; --ok:#2f8a5f;
+  }
+
+  *{ box-sizing:border-box; }
+  body{
+    margin:0; background:var(--bg); color:var(--ink); font-family:var(--mono);
+    line-height:1.5; -webkit-font-smoothing:antialiased;
+    background-image:radial-gradient(1200px 600px at 50% -10%, color-mix(in srgb, var(--accent) 8%, transparent), transparent 60%);
+  }
+  .wrap{ max-width:1080px; margin:0 auto; padding:clamp(20px,4vw,48px) clamp(16px,3vw,32px) 56px; }
+
+  header.head{ display:flex; align-items:flex-start; justify-content:space-between; gap:16px; margin-bottom:28px; }
+  .eyebrow{ font-size:12px; letter-spacing:.22em; text-transform:uppercase; color:var(--accent); font-weight:600; }
+  h1{ font-size:clamp(22px,3.4vw,30px); margin:.35em 0 .25em; letter-spacing:-.01em; text-wrap:balance; font-weight:650; }
+  .sub{ color:var(--muted); font-family:var(--sans); font-size:14px; max-width:56ch; }
+  .theme-btn{
+    flex:none; font-family:var(--mono); font-size:12px; letter-spacing:.06em; color:var(--muted);
+    background:var(--panel); border:1px solid var(--line); border-radius:999px; padding:8px 14px; cursor:pointer;
+    transition:color .15s, border-color .15s;
+  }
+  .theme-btn:hover{ color:var(--ink); border-color:var(--accent); }
+
+  .device{ display:grid; grid-template-columns:minmax(0,360px) minmax(0,1fr); gap:20px; align-items:start; }
+  @media (max-width:780px){ .device{ grid-template-columns:1fr; } }
+
+  .panel{ background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); }
+  .panel-pad{ padding:18px; }
+  .panel-title{ font-size:11px; letter-spacing:.18em; text-transform:uppercase; color:var(--muted); margin:0 0 12px; }
+
+  /* Calculator */
+  .calc{ padding:18px; }
+  .lcd{
+    background:var(--lcd-bg); color:var(--lcd); border:1px solid var(--line); border-radius:10px;
+    font-size:clamp(30px,7vw,44px); text-align:right; padding:18px 18px; margin-bottom:16px;
+    font-variant-numeric:tabular-nums; overflow:hidden; text-overflow:ellipsis; min-height:1.4em;
+    box-shadow:inset 0 1px 0 color-mix(in srgb, var(--lcd) 22%, transparent);
+    letter-spacing:.02em;
+  }
+  .grid{ display:grid; gap:10px; }
+  .key{
+    font-family:var(--mono); font-size:20px; color:var(--ink); background:var(--panel-2);
+    border:1px solid var(--line); border-radius:12px; padding:0; height:60px; cursor:pointer;
+    transition:transform .05s ease, background .15s, border-color .15s, color .15s;
+    user-select:none;
+  }
+  .key:hover{ border-color:color-mix(in srgb, var(--accent) 50%, var(--line)); }
+  .key:active{ transform:translateY(2px); }
+  .key:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
+  .key.op{ color:var(--accent); font-weight:650; }
+  .key.eq{ background:var(--accent); color:var(--accent-ink); border-color:var(--accent); font-weight:700; }
+  .key.clr{ color:var(--danger); }
+
+  /* Right column */
+  .tabs{ display:flex; gap:4px; padding:6px; border-bottom:1px solid var(--line); }
+  .tab{
+    font-family:var(--mono); font-size:12px; letter-spacing:.04em; color:var(--muted);
+    background:transparent; border:0; border-radius:8px; padding:7px 12px; cursor:pointer;
+  }
+  .tab[aria-selected="true"]{ color:var(--ink); background:var(--panel-2); }
+  .tab:hover{ color:var(--ink); }
+  .view{ padding:14px 16px; height:360px; overflow:auto; font-size:13px; }
+  .view::-webkit-scrollbar{ width:10px; } .view::-webkit-scrollbar-thumb{ background:var(--line); border-radius:99px; }
+
+  #bus .line{ padding:3px 0; color:var(--ink); white-space:pre-wrap; word-break:break-word; }
+  #bus .line .n{ color:var(--muted); }
+  #bus .line .arrow{ color:var(--accent); }
+  #bus .line.danger{ color:var(--danger); }
+  #bus .empty{ color:var(--muted); font-family:var(--sans); font-style:italic; }
+  .anim{ animation:slidein .18s ease both; }
+  @keyframes slidein{ from{ opacity:0; transform:translateX(-6px); } to{ opacity:1; transform:none; } }
+  @media (prefers-reduced-motion:reduce){ .anim{ animation:none; } .key:active{ transform:none; } }
+
+  #ir pre, #state pre{ margin:0; white-space:pre-wrap; word-break:break-word; color:var(--ink); }
+  .actor-block{ margin-bottom:14px; }
+  .actor-name{ color:var(--accent); }
+  .cap{ color:var(--muted); }
+  .kv{ display:grid; grid-template-columns:auto 1fr; gap:2px 12px; margin-top:6px; }
+  .kv .k{ color:var(--muted); } .kv .v{ color:var(--ink); font-variant-numeric:tabular-nums; }
+
+  .foot{ margin-top:26px; color:var(--muted); font-family:var(--sans); font-size:13px; max-width:70ch; }
+  .foot code{ font-family:var(--mono); color:var(--ink); background:var(--panel); padding:1px 6px; border-radius:6px; border:1px solid var(--line); font-size:12px; }
+  .hint{ margin-top:10px; color:var(--muted); font-family:var(--sans); font-size:12.5px; }
+</style>
+
+<script type="application/json" id="program">
+{
+  "program": "calculadora-ui",
+  "entry": "Actor_UI",
+  "actors": [
+    {
+      "name": "Actor_UI",
+      "capabilities": ["RENDER"],
+      "on_start": [ { "op": "DEF_VAR", "name": "display", "value": 0 } ],
+      "on_message": {
+        "bind": "value",
+        "body": [ { "op": "ASSIGN", "target": "display", "value": { "var": "value" } } ]
+      },
+      "view": {
+        "type": "column",
+        "children": [
+          { "type": "label", "text": { "var": "display" } },
+          {
+            "type": "grid", "columns": 4,
+            "children": [
+              { "type": "button", "label": "7", "send": 7, "to": "Actor_Calculo" },
+              { "type": "button", "label": "8", "send": 8, "to": "Actor_Calculo" },
+              { "type": "button", "label": "9", "send": 9, "to": "Actor_Calculo" },
+              { "type": "button", "label": "/", "send": "/", "to": "Actor_Calculo" },
+              { "type": "button", "label": "4", "send": 4, "to": "Actor_Calculo" },
+              { "type": "button", "label": "5", "send": 5, "to": "Actor_Calculo" },
+              { "type": "button", "label": "6", "send": 6, "to": "Actor_Calculo" },
+              { "type": "button", "label": "*", "send": "*", "to": "Actor_Calculo" },
+              { "type": "button", "label": "1", "send": 1, "to": "Actor_Calculo" },
+              { "type": "button", "label": "2", "send": 2, "to": "Actor_Calculo" },
+              { "type": "button", "label": "3", "send": 3, "to": "Actor_Calculo" },
+              { "type": "button", "label": "-", "send": "-", "to": "Actor_Calculo" },
+              { "type": "button", "label": "C", "send": "C", "to": "Actor_Calculo" },
+              { "type": "button", "label": "0", "send": 0, "to": "Actor_Calculo" },
+              { "type": "button", "label": "=", "send": "=", "to": "Actor_Calculo" },
+              { "type": "button", "label": "+", "send": "+", "to": "Actor_Calculo" }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "Actor_Calculo",
+      "capabilities": [],
+      "on_start": [
+        { "op": "DEF_VAR", "name": "entry", "value": 0 },
+        { "op": "DEF_VAR", "name": "acc", "value": 0 },
+        { "op": "DEF_VAR", "name": "op", "value": "" }
+      ],
+      "on_message": {
+        "bind": "tok",
+        "body": [
+          { "op": "DEF_VAR", "name": "is_op", "value": false },
+          { "op": "COMPARE", "target": "t1", "operator": "==", "left": { "var": "tok" }, "right": "+" },
+          { "op": "IF_COND", "cond": { "var": "t1" }, "then": [ { "op": "ASSIGN", "target": "is_op", "value": true } ] },
+          { "op": "COMPARE", "target": "t2", "operator": "==", "left": { "var": "tok" }, "right": "-" },
+          { "op": "IF_COND", "cond": { "var": "t2" }, "then": [ { "op": "ASSIGN", "target": "is_op", "value": true } ] },
+          { "op": "COMPARE", "target": "t3", "operator": "==", "left": { "var": "tok" }, "right": "*" },
+          { "op": "IF_COND", "cond": { "var": "t3" }, "then": [ { "op": "ASSIGN", "target": "is_op", "value": true } ] },
+          { "op": "COMPARE", "target": "t4", "operator": "==", "left": { "var": "tok" }, "right": "/" },
+          { "op": "IF_COND", "cond": { "var": "t4" }, "then": [ { "op": "ASSIGN", "target": "is_op", "value": true } ] },
+          { "op": "COMPARE", "target": "is_clear", "operator": "==", "left": { "var": "tok" }, "right": "C" },
+          { "op": "COMPARE", "target": "is_equal", "operator": "==", "left": { "var": "tok" }, "right": "=" },
+          { "op": "DEF_VAR", "name": "out", "value": { "var": "entry" } },
+          {
+            "op": "IF_COND", "cond": { "var": "is_clear" },
+            "then": [
+              { "op": "ASSIGN", "target": "entry", "value": 0 },
+              { "op": "ASSIGN", "target": "acc", "value": 0 },
+              { "op": "ASSIGN", "target": "op", "value": "" },
+              { "op": "ASSIGN", "target": "out", "value": 0 }
+            ],
+            "else": [
+              {
+                "op": "IF_COND", "cond": { "var": "is_equal" },
+                "then": [
+                  { "op": "COMPARE", "target": "hasop", "operator": "!=", "left": { "var": "op" }, "right": "" },
+                  {
+                    "op": "IF_COND", "cond": { "var": "hasop" },
+                    "then": [
+                      { "op": "COMPARE", "target": "ap", "operator": "==", "left": { "var": "op" }, "right": "+" },
+                      { "op": "IF_COND", "cond": { "var": "ap" }, "then": [ { "op": "MATH", "target": "acc", "operator": "+", "left": { "var": "acc" }, "right": { "var": "entry" } } ] },
+                      { "op": "COMPARE", "target": "am", "operator": "==", "left": { "var": "op" }, "right": "-" },
+                      { "op": "IF_COND", "cond": { "var": "am" }, "then": [ { "op": "MATH", "target": "acc", "operator": "-", "left": { "var": "acc" }, "right": { "var": "entry" } } ] },
+                      { "op": "COMPARE", "target": "ax", "operator": "==", "left": { "var": "op" }, "right": "*" },
+                      { "op": "IF_COND", "cond": { "var": "ax" }, "then": [ { "op": "MATH", "target": "acc", "operator": "*", "left": { "var": "acc" }, "right": { "var": "entry" } } ] },
+                      { "op": "COMPARE", "target": "ad", "operator": "==", "left": { "var": "op" }, "right": "/" },
+                      { "op": "IF_COND", "cond": { "var": "ad" }, "then": [
+                          { "op": "COMPARE", "target": "nz", "operator": "!=", "left": { "var": "entry" }, "right": 0 },
+                          { "op": "IF_COND", "cond": { "var": "nz" }, "then": [ { "op": "MATH", "target": "acc", "operator": "/", "left": { "var": "acc" }, "right": { "var": "entry" } } ] }
+                      ] },
+                      { "op": "ASSIGN", "target": "out", "value": { "var": "acc" } },
+                      { "op": "ASSIGN", "target": "op", "value": "" },
+                      { "op": "ASSIGN", "target": "entry", "value": 0 }
+                    ]
+                  }
+                ],
+                "else": [
+                  {
+                    "op": "IF_COND", "cond": { "var": "is_op" },
+                    "then": [
+                      { "op": "COMPARE", "target": "noop", "operator": "==", "left": { "var": "op" }, "right": "" },
+                      {
+                        "op": "IF_COND", "cond": { "var": "noop" },
+                        "then": [ { "op": "ASSIGN", "target": "acc", "value": { "var": "entry" } } ],
+                        "else": [
+                          { "op": "COMPARE", "target": "ap", "operator": "==", "left": { "var": "op" }, "right": "+" },
+                          { "op": "IF_COND", "cond": { "var": "ap" }, "then": [ { "op": "MATH", "target": "acc", "operator": "+", "left": { "var": "acc" }, "right": { "var": "entry" } } ] },
+                          { "op": "COMPARE", "target": "am", "operator": "==", "left": { "var": "op" }, "right": "-" },
+                          { "op": "IF_COND", "cond": { "var": "am" }, "then": [ { "op": "MATH", "target": "acc", "operator": "-", "left": { "var": "acc" }, "right": { "var": "entry" } } ] },
+                          { "op": "COMPARE", "target": "ax", "operator": "==", "left": { "var": "op" }, "right": "*" },
+                          { "op": "IF_COND", "cond": { "var": "ax" }, "then": [ { "op": "MATH", "target": "acc", "operator": "*", "left": { "var": "acc" }, "right": { "var": "entry" } } ] },
+                          { "op": "COMPARE", "target": "ad", "operator": "==", "left": { "var": "op" }, "right": "/" },
+                          { "op": "IF_COND", "cond": { "var": "ad" }, "then": [
+                              { "op": "COMPARE", "target": "nz", "operator": "!=", "left": { "var": "entry" }, "right": 0 },
+                              { "op": "IF_COND", "cond": { "var": "nz" }, "then": [ { "op": "MATH", "target": "acc", "operator": "/", "left": { "var": "acc" }, "right": { "var": "entry" } } ] }
+                          ] }
+                        ]
+                      },
+                      { "op": "ASSIGN", "target": "out", "value": { "var": "acc" } },
+                      { "op": "ASSIGN", "target": "op", "value": { "var": "tok" } },
+                      { "op": "ASSIGN", "target": "entry", "value": 0 }
+                    ],
+                    "else": [
+                      { "op": "MATH", "target": "entry", "operator": "*", "left": { "var": "entry" }, "right": 10 },
+                      { "op": "MATH", "target": "entry", "operator": "+", "left": { "var": "entry" }, "right": { "var": "tok" } },
+                      { "op": "ASSIGN", "target": "out", "value": { "var": "entry" } }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          { "op": "SEND", "to": "Actor_UI", "value": { "var": "out" } }
+        ]
+      }
+    }
+  ]
+}
+</script>
+
+<div class="wrap">
+  <header class="head">
+    <div>
+      <div class="eyebrow">StardustVM · UI-IR</div>
+      <h1>Calculadora renderizada desde el árbol de widgets</h1>
+      <p class="sub">El mismo <code style="font-family:var(--mono)">calculadora.json</code> que corre en la terminal, aquí ejecutado por un intérprete de StardustLang portado a JavaScript. Pulsa un botón y observa el bus de mensajes: cada pulsación es un mensaje entre actores aislados.</p>
+    </div>
+    <button class="theme-btn" id="theme" type="button">tema</button>
+  </header>
+
+  <div class="device">
+    <section class="panel calc" aria-label="Calculadora">
+      <div id="calc"></div>
+      <p class="hint">Teclado: 0–9 · + − * / · Enter (=) · Esc/c (C)</p>
+    </section>
+
+    <section class="panel" aria-label="Interior de la máquina">
+      <div class="tabs" role="tablist">
+        <button class="tab" role="tab" aria-selected="true" data-tab="bus">Bus de mensajes</button>
+        <button class="tab" role="tab" aria-selected="false" data-tab="ir">UI-IR</button>
+        <button class="tab" role="tab" aria-selected="false" data-tab="state">Estado</button>
+      </div>
+      <div class="view" id="bus"></div>
+      <div class="view" id="ir" hidden><pre></pre></div>
+      <div class="view" id="state" hidden></div>
+    </section>
+  </div>
+
+  <p class="foot">
+    <strong style="color:var(--ink)">Backend intercambiable.</strong> Este árbol de widgets semántico
+    (<code>label</code>, <code>button</code>, <code>grid</code>) lo renderiza igual la terminal
+    (<code>src/ui.rs</code>) que esta página en el DOM — sin tocar el programa. La lógica vive en dos
+    actores aislados que solo se comunican por mensajes: <code>Actor_UI</code> muestra, <code>Actor_Calculo</code>
+    calcula. Ninguno conoce al otro más allá de su contrato.
+  </p>
+</div>
+
+<script>
+(() => {
+  "use strict";
+  const PROGRAM = JSON.parse(document.getElementById("program").textContent);
+
+  // ---------- Sistema de valores ----------
+  const V = (t, v) => ({ t, v });
+  class StardustError extends Error {}
+
+  function litToVal(x) {
+    if (typeof x === "number") return Number.isInteger(x) ? V("int", x) : V("float", x);
+    if (typeof x === "string") return V("str", x);
+    if (typeof x === "boolean") return V("bool", x);
+    return V("null", null);
+  }
+  function fmt(v) {
+    switch (v.t) {
+      case "int": case "float": return String(v.v);
+      case "str": return v.v;
+      case "bool": return String(v.v);
+      case "record": return "{" + Object.keys(v.v).sort().map(k => k + ": " + fmt(v.v[k])).join(", ") + "}";
+      default: return "null";
+    }
+  }
+  function truthy(v) {
+    switch (v.t) {
+      case "bool": return v.v;
+      case "int": case "float": return v.v !== 0;
+      case "str": return v.v.length > 0;
+      case "record": return Object.keys(v.v).length > 0;
+      default: return false;
+    }
+  }
+  function numOf(v) {
+    if (v.t === "int" || v.t === "float") return v.v;
+    throw new StardustError("se esperaba número, no " + fmt(v));
+  }
+  function evalExpr(e, mem) {
+    if (e !== null && typeof e === "object" && !Array.isArray(e)) {
+      if ("var" in e) {
+        if (!(e.var in mem)) throw new StardustError("variable no definida: '" + e.var + "'");
+        return mem[e.var];
+      }
+      if ("record" in e) {
+        const o = {}; for (const k in e.record) o[k] = evalExpr(e.record[k], mem);
+        return V("record", o);
+      }
+      if ("field" in e && "from" in e) {
+        const r = evalExpr(e.from, mem);
+        if (r.t !== "record") throw new StardustError("no es un record");
+        if (!(e.field in r.v)) throw new StardustError("campo '" + e.field + "' ausente");
+        return r.v[e.field];
+      }
+      throw new StardustError("expresión no reconocida");
+    }
+    return litToVal(e);
+  }
+  function arith(op, l, r) {
+    if (op === "+" && (l.t === "str" || r.t === "str")) return V("str", fmt(l) + fmt(r));
+    const a = numOf(l), b = numOf(r), isF = l.t === "float" || r.t === "float";
+    let res;
+    switch (op) {
+      case "+": res = a + b; break;
+      case "-": res = a - b; break;
+      case "*": res = a * b; break;
+      case "/": if (b === 0) throw new StardustError("división por cero"); res = isF ? a / b : Math.trunc(a / b); break;
+      case "%": if (b === 0) throw new StardustError("división por cero"); res = a % b; break;
+      default: throw new StardustError("operador no soportado: " + op);
+    }
+    return V(isF ? "float" : "int", res);
+  }
+  function eq(l, r) {
+    if ((l.t === "int" || l.t === "float") && (r.t === "int" || r.t === "float")) return l.v === r.v;
+    if (l.t !== r.t) return false;
+    if (l.t === "record") return fmt(l) === fmt(r);
+    return l.v === r.v;
+  }
+  function cmp(op, l, r) {
+    if (op === "==") return eq(l, r);
+    if (op === "!=") return !eq(l, r);
+    let c;
+    const num = (l.t === "int" || l.t === "float") && (r.t === "int" || r.t === "float");
+    if (num) c = l.v < r.v ? -1 : (l.v > r.v ? 1 : 0);
+    else if (l.t === "str" && r.t === "str") c = l.v < r.v ? -1 : (l.v > r.v ? 1 : 0);
+    else throw new StardustError("no ordenable: " + fmt(l) + " " + op + " " + fmt(r));
+    switch (op) { case "<": return c < 0; case ">": return c > 0; case "<=": return c <= 0; case ">=": return c >= 0; }
+    return false;
+  }
+
+  // ---------- La máquina virtual ----------
+  const LOOP_GUARD = 5000000;
+  class VM {
+    constructor(prog) {
+      this.actors = {}; this.order = [];
+      for (const a of prog.actors) { this.actors[a.name] = { def: a, mem: {} }; this.order.push(a.name); }
+      this.queue = []; this.counter = 0; this.onTrace = null;
+    }
+    trace(line, kind) {
+      this.counter++;
+      if (this.onTrace) this.onTrace(this.counter, line, kind || "route");
+    }
+    boot() {
+      for (const name of this.order) {
+        const a = this.actors[name];
+        if (a.def.on_start && a.def.on_start.length) this.runHandler(name, null);
+      }
+      this.drain();
+    }
+    runHandler(name, incoming) {
+      const a = this.actors[name];
+      try {
+        let body;
+        if (incoming) {
+          const h = a.def.on_message || {};
+          if (h.bind) a.mem[h.bind] = incoming.payload;
+          if (h.reply_to) a.mem[h.reply_to] = V("str", incoming.from);
+          body = h.body || [];
+        } else {
+          body = a.def.on_start || [];
+        }
+        this.execBlock(body, name);
+      } catch (err) {
+        a.mem = {};
+        this.trace("FALLO AISLADO en " + name + ": " + (err.message || err), "danger");
+      }
+    }
+    execBlock(instrs, name) { for (const ins of instrs) this.exec(ins, name); }
+    exec(ins, name) {
+      const mem = this.actors[name].mem;
+      switch (ins.op) {
+        case "DEF_VAR": mem[ins.name] = ("value" in ins && ins.value !== undefined) ? evalExpr(ins.value, mem) : V("null", null); break;
+        case "ASSIGN": mem[ins.target] = evalExpr(ins.value, mem); break;
+        case "IF_COND":
+          if (truthy(evalExpr(ins.cond, mem))) this.execBlock(ins.then || [], name);
+          else this.execBlock(ins.else || [], name);
+          break;
+        case "LOOP": {
+          let g = 0;
+          while (truthy(evalExpr(ins.cond, mem))) {
+            this.execBlock(ins.body || [], name);
+            if (++g >= LOOP_GUARD) throw new StardustError("bucle excedió el tope de seguridad");
+          }
+          break;
+        }
+        case "COMPARE": mem[ins.target] = V("bool", cmp(ins.operator, evalExpr(ins.left, mem), evalExpr(ins.right, mem))); break;
+        case "MATH": mem[ins.target] = arith(ins.operator, evalExpr(ins.left, mem), evalExpr(ins.right, mem)); break;
+        case "SEND": {
+          const toV = evalExpr(ins.to, mem);
+          if (toV.t !== "str") throw new StardustError("SEND 'to' debe ser texto");
+          const payload = evalExpr(ins.value, mem);
+          this.trace(name + "  →  " + toV.v + "  ::  " + fmt(payload));
+          this.queue.push({ from: name, to: toV.v, payload });
+          break;
+        }
+        default: throw new StardustError("op desconocida: " + ins.op);
+      }
+    }
+    drain() {
+      while (this.queue.length) {
+        const msg = this.queue.shift();
+        if (!this.actors[msg.to]) { this.trace("descartado → " + msg.to, "danger"); continue; }
+        this.runHandler(msg.to, msg);
+      }
+    }
+    // Evento externo (pulsación de botón) que entra al bus.
+    inject(from, target, payload) {
+      this.trace(from + "  →  " + target + "  ::  " + fmt(payload));
+      this.queue.push({ from, to: target, payload });
+      this.drain();
+    }
+  }
+
+  // ---------- Renderer web del UI-IR ----------
+  const vm = new VM(PROGRAM);
+  const uiName = vm.order.find(n => {
+    const d = vm.actors[n].def;
+    return d.view && (d.capabilities || []).includes("RENDER");
+  });
+  const uiActor = vm.actors[uiName];
+
+  const calcEl = document.getElementById("calc");
+  const busEl = document.getElementById("bus");
+
+  function classify(label) {
+    if ("+-*/".includes(label) && label.length === 1) return " op";
+    if (label === "=") return " eq";
+    if (label === "C") return " clr";
+    return "";
+  }
+  function renderNode(node, mem, onPress) {
+    let el;
+    switch (node.type) {
+      case "label":
+        el = document.createElement("div");
+        el.className = "lcd";
+        el.textContent = fmt(evalExpr(node.text, mem));
+        return el;
+      case "button": {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "key" + classify(node.label);
+        b.textContent = node.label;
+        b.addEventListener("click", () => onPress(node));
+        return b;
+      }
+      case "row":
+        el = document.createElement("div"); el.className = "row";
+        (node.children || []).forEach(c => el.appendChild(renderNode(c, mem, onPress)));
+        return el;
+      case "column":
+        el = document.createElement("div"); el.className = "col";
+        (node.children || []).forEach(c => el.appendChild(renderNode(c, mem, onPress)));
+        return el;
+      case "grid":
+        el = document.createElement("div"); el.className = "grid";
+        el.style.gridTemplateColumns = "repeat(" + node.columns + ",1fr)";
+        (node.children || []).forEach(c => el.appendChild(renderNode(c, mem, onPress)));
+        return el;
+      default:
+        el = document.createElement("div");
+        el.textContent = "widget desconocido: " + node.type;
+        return el;
+    }
+  }
+  function onPress(node) {
+    const target = node.to || uiName;
+    const payload = evalExpr(node.send, uiActor.mem);
+    vm.inject("UI", target, payload);
+    rerender();
+    updateState();
+  }
+  function rerender() {
+    calcEl.replaceChildren(renderNode(uiActor.def.view, uiActor.mem, onPress));
+  }
+
+  // ---------- Bus de mensajes (observabilidad) ----------
+  vm.onTrace = (n, line, kind) => {
+    const empty = busEl.querySelector(".empty"); if (empty) empty.remove();
+    const div = document.createElement("div");
+    div.className = "line anim" + (kind === "danger" ? " danger" : "");
+    const num = String(n).padStart(3, "0");
+    div.innerHTML = '<span class="n">#' + num + '</span>  ' +
+      line.replace(/→/g, '<span class="arrow">→</span>');
+    busEl.appendChild(div);
+    busEl.scrollTop = busEl.scrollHeight;
+  };
+  function busEmptyHint() {
+    busEl.innerHTML = '<div class="empty">Sin mensajes todavía. Pulsa un botón para ver el bus.</div>';
+  }
+
+  // ---------- Estado de los actores (memoria privada) ----------
+  const stateEl = document.getElementById("state");
+  function updateState() {
+    stateEl.innerHTML = "";
+    for (const name of vm.order) {
+      const a = vm.actors[name];
+      const block = document.createElement("div");
+      block.className = "actor-block";
+      const caps = (a.def.capabilities || []).length ? " [" + a.def.capabilities.join(",") + "]" : " [ciego]";
+      let kv = "";
+      const keys = Object.keys(a.mem).sort();
+      if (keys.length === 0) kv = '<div class="cap">(memoria vacía)</div>';
+      else {
+        kv = '<div class="kv">';
+        for (const k of keys) kv += '<span class="k">' + k + '</span><span class="v">' + fmt(a.mem[k]) + "</span>";
+        kv += "</div>";
+      }
+      block.innerHTML = '<span class="actor-name">' + name + "</span><span class=\"cap\">" + caps + "</span>" + kv;
+      stateEl.appendChild(block);
+    }
+  }
+
+  // ---------- UI-IR (el árbol de widgets) ----------
+  document.querySelector("#ir pre").textContent = JSON.stringify(uiActor.def.view, null, 2);
+
+  // ---------- Pestañas ----------
+  const tabs = document.querySelectorAll(".tab");
+  const panes = { bus: busEl, ir: document.getElementById("ir"), state: stateEl };
+  tabs.forEach(t => t.addEventListener("click", () => {
+    tabs.forEach(x => x.setAttribute("aria-selected", String(x === t)));
+    for (const key in panes) panes[key].hidden = (key !== t.dataset.tab);
+  }));
+
+  // ---------- Teclado ----------
+  const KEYMAP = { Enter: "=", "=": "=", Escape: "C", c: "C", C: "C" };
+  window.addEventListener("keydown", (e) => {
+    let label = KEYMAP[e.key] || null;
+    if (!label && /^[0-9+\-*/]$/.test(e.key)) label = e.key;
+    if (!label) return;
+    const btns = uiActor.def.view.children[1].children;
+    const node = btns.find(b => b.label === label);
+    if (node) { e.preventDefault(); onPress(node); }
+  });
+
+  // ---------- Tema ----------
+  const themeBtn = document.getElementById("theme");
+  function effectiveTheme() {
+    const attr = document.documentElement.getAttribute("data-theme");
+    if (attr) return attr;
+    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  }
+  themeBtn.addEventListener("click", () => {
+    const next = effectiveTheme() === "dark" ? "light" : "dark";
+    document.documentElement.setAttribute("data-theme", next);
+    themeBtn.textContent = next === "dark" ? "tema · claro" : "tema · oscuro";
+  });
+
+  // ---------- Arranque ----------
+  busEmptyHint();
+  vm.boot();
+  rerender();
+  updateState();
+})();
+</script>

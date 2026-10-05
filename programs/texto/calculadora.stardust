@@ -1,0 +1,53 @@
+app calculadora-ui
+
+actor UI:
+  start:
+    display = 0
+  on value:
+    display = value
+  view:
+    column:
+      label(display)
+      grid(4):
+        for k in [7, 8, 9, '/', 4, 5, 6, '*', 1, 2, 3, '-', 'C', 0, '=', '+']:
+          button(k, send=k, to=Calculo)
+
+actor Calculo:
+  start:
+    entry = 0
+    acc = 0
+    op = ''
+  def aplicar(a, b, o):
+    if o == '+':
+      return a + b
+    elif o == '-':
+      return a - b
+    elif o == '*':
+      return a * b
+    elif o == '/' and b != 0:
+      return a / b
+    else:
+      return a
+  on tok:
+    if tok == 'C':
+      entry = 0
+      acc = 0
+      op = ''
+      send(UI, 0)
+    elif tok == '=':
+      if op != '':
+        acc = aplicar(acc, entry, op)
+        op = ''
+        entry = 0
+      send(UI, acc)
+    elif tok in ['+', '-', '*', '/']:
+      if op == '':
+        acc = entry
+      else:
+        acc = aplicar(acc, entry, op)
+      op = tok
+      entry = 0
+      send(UI, acc)
+    else:
+      entry = entry * 10 + tok
+      send(UI, entry)

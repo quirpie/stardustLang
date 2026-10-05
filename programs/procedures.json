@@ -1,0 +1,73 @@
+{
+  "program": "procedimientos-recursivos",
+  "entry": "Actor_IO",
+  "actors": [
+    {
+      "name": "Actor_IO",
+      "capabilities": ["IO_STREAM"],
+      "on_start": [
+        { "op": "IO_STREAM", "mode": "out", "prompt": "== Procedimientos recursivos ==" },
+        { "op": "IO_STREAM", "mode": "in", "target": "n", "prompt": "n = " },
+        { "op": "SEND", "to": "Actor_Math", "value": { "var": "n" } }
+      ],
+      "on_message": {
+        "bind": "r",
+        "body": [
+          { "op": "IO_STREAM", "mode": "out", "prompt": "fib(n)  = ", "value": { "field": "fib", "from": { "var": "r" } } },
+          { "op": "IO_STREAM", "mode": "out", "prompt": "n!      = ", "value": { "field": "factorial", "from": { "var": "r" } } }
+        ]
+      }
+    },
+    {
+      "name": "Actor_Math",
+      "capabilities": [],
+      "procedures": {
+        "fib": {
+          "params": ["k"],
+          "returns": "r",
+          "body": [
+            { "op": "COMPARE", "target": "base", "operator": "<", "left": { "var": "k" }, "right": 2 },
+            {
+              "op": "IF_COND", "cond": { "var": "base" },
+              "then": [ { "op": "ASSIGN", "target": "r", "value": { "var": "k" } } ],
+              "else": [
+                { "op": "MATH", "target": "k1", "operator": "-", "left": { "var": "k" }, "right": 1 },
+                { "op": "MATH", "target": "k2", "operator": "-", "left": { "var": "k" }, "right": 2 },
+                { "op": "CALL", "proc": "fib", "args": [ { "var": "k1" } ], "into": "f1" },
+                { "op": "CALL", "proc": "fib", "args": [ { "var": "k2" } ], "into": "f2" },
+                { "op": "MATH", "target": "r", "operator": "+", "left": { "var": "f1" }, "right": { "var": "f2" } }
+              ]
+            }
+          ]
+        },
+        "fact": {
+          "params": ["k"],
+          "returns": "r",
+          "body": [
+            { "op": "COMPARE", "target": "base", "operator": "<=", "left": { "var": "k" }, "right": 1 },
+            {
+              "op": "IF_COND", "cond": { "var": "base" },
+              "then": [ { "op": "ASSIGN", "target": "r", "value": 1 } ],
+              "else": [
+                { "op": "MATH", "target": "k1", "operator": "-", "left": { "var": "k" }, "right": 1 },
+                { "op": "CALL", "proc": "fact", "args": [ { "var": "k1" } ], "into": "sub" },
+                { "op": "MATH", "target": "r", "operator": "*", "left": { "var": "k" }, "right": { "var": "sub" } }
+              ]
+            }
+          ]
+        }
+      },
+      "on_message": {
+        "bind": "n",
+        "body": [
+          { "op": "CALL", "proc": "fib", "args": [ { "var": "n" } ], "into": "fibval" },
+          { "op": "CALL", "proc": "fact", "args": [ { "var": "n" } ], "into": "factval" },
+          {
+            "op": "SEND", "to": "Actor_IO",
+            "value": { "record": { "fib": { "var": "fibval" }, "factorial": { "var": "factval" } } }
+          }
+        ]
+      }
+    }
+  ]
+}

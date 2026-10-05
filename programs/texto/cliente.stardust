@@ -1,0 +1,10 @@
+app cliente
+
+actor IO:
+  start:
+    print("== Cliente: área calculada por la app remota 'geometria' ==")
+    base = input('Base: ')
+    altura = input('Altura: ')
+    send('geometria/Areas', {base: base, altura: altura}, cap='cap-geo-123')
+  on resp:
+    print('Área (vía geometria/Areas) = ', resp.area)

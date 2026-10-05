@@ -1,0 +1,50 @@
+{
+  "program": "crypto-tokens",
+  "entry": "Actor_IO",
+  "actors": [
+    {
+      "name": "Actor_IO",
+      "capabilities": ["IO_STREAM"],
+      "on_start": [
+        { "op": "IO_STREAM", "mode": "out", "prompt": "== Tokens de capacidad firmados (HMAC) ==" },
+        { "op": "IO_STREAM", "mode": "in", "target": "user", "prompt": "Usuario a autorizar: " },
+        { "op": "SEND", "to": "Actor_Auth", "value": { "var": "user" } }
+      ],
+      "on_message": {
+        "bind": "r",
+        "body": [
+          { "op": "IO_STREAM", "mode": "out", "prompt": "SHA-256 del usuario   : ", "value": { "field": "hash", "from": { "var": "r" } } },
+          { "op": "IO_STREAM", "mode": "out", "prompt": "Token firmado         : ", "value": { "field": "token", "from": { "var": "r" } } },
+          { "op": "IO_STREAM", "mode": "out", "prompt": "Verificar (genuino)   : ", "value": { "field": "valido", "from": { "var": "r" } } },
+          { "op": "IO_STREAM", "mode": "out", "prompt": "Verificar (falsificado): ", "value": { "field": "valido_falso", "from": { "var": "r" } } }
+        ]
+      }
+    },
+    {
+      "name": "Actor_Auth",
+      "capabilities": ["CRYPTO"],
+      "on_message": {
+        "bind": "user",
+        "body": [
+          { "op": "HASH", "value": { "var": "user" }, "into": "hash" },
+          { "op": "SIGN", "value": { "var": "user" }, "into": "sig" },
+          { "op": "DEF_VAR", "name": "token", "value": { "var": "user" } },
+          { "op": "MATH", "target": "token", "operator": "+", "left": { "var": "token" }, "right": "." },
+          { "op": "MATH", "target": "token", "operator": "+", "left": { "var": "token" }, "right": { "var": "sig" } },
+          { "op": "VERIFY", "value": { "var": "user" }, "signature": { "var": "sig" }, "into": "valido" },
+          { "op": "DEF_VAR", "name": "atacante", "value": "mallory" },
+          { "op": "VERIFY", "value": { "var": "atacante" }, "signature": { "var": "sig" }, "into": "valido_falso" },
+          {
+            "op": "SEND", "to": "Actor_IO",
+            "value": { "record": {
+              "hash": { "var": "hash" },
+              "token": { "var": "token" },
+              "valido": { "var": "valido" },
+              "valido_falso": { "var": "valido_falso" }
+            } }
+          }
+        ]
+      }
+    }
+  ]
+}

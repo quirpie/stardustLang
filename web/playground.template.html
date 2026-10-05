@@ -1,0 +1,800 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stardust Playground</title>
+<!--
+  web/playground.template.html — Escritorio de tiles de StardustLang. Dos modos:
+
+  · LOCAL (el HTML abierto suelto, sin servidor): la BIBLIOTECA es un programa
+    StardustLang (programs/biblioteca.json): el actor `Biblioteca` (capacidad FILE)
+    guarda, borra y lista los programas en su VFS; el host lo espeja a IndexedDB
+    ("stardust-biblioteca"). Cada app abierta corre aquí mismo con su Engine y su
+    disco ("stardust-run:<app>").
+  · SERVIDOR (servido por stardust-server, que inyecta STARDUST_CONFIG): sesión con
+    token, la biblioteca es la API (/api/v1/programs, con versiones), y cada app
+    corre en un iframe del RUNNER (web/runner.template.html), en otro origen. Las
+    rutas /p/{owner}/{name}[/v/{n}] muestran un solo programa (como un artefacto).
+
+  En ambos modos los DATOS de las apps viven solo en el IndexedDB del navegador.
+  Escritorio: ventanas en mosaico (master-stack: la 1ª ocupa la columna izquierda,
+  el resto se apilan a la derecha). Ver docs/servidor.md, «Playground y runner».
+
+  Marcadores (con doble guion bajo) que sustituye web/build-playground.sh:
+    STARDUST_CSS web/stardust.css (tema + widgets)
+    GLUE         glue de wasm-bindgen (--target web)
+    RUNTIME      web/runtime.js
+    BIBLIO       programs/biblioteca.json (dentro de un template literal)
+    WASM         el .wasm en base64
+  y que sustituye el servidor al servirlo: STARDUST_CONFIG.
+-->
+<style>
+  /*__STARDUST_CSS__*/
+
+
+  *{ box-sizing:border-box; }
+  html, body{ height:100%; }
+  body{
+    margin:0; background:var(--bg); color:var(--ink); font-family:var(--mono); font-size:14px;
+    line-height:1.5; -webkit-font-smoothing:antialiased;
+  }
+  button{ font:inherit; }
+  .shell{ display:grid; grid-template-columns:260px minmax(0,1fr); height:100vh; height:100dvh; }
+
+  /* ── Panel lateral (biblioteca) ─────────────────────────────────────────── */
+  aside{ display:flex; flex-direction:column; min-height:0; background:var(--panel); border-right:1px solid var(--line); }
+  .brand{ padding:16px 16px 12px; display:flex; align-items:center; justify-content:space-between; gap:8px; }
+  .brand .eyebrow{ font-size:11px; letter-spacing:.22em; text-transform:uppercase; color:var(--accent); font-weight:600; }
+  .brand h1{ margin:0; font-size:17px; font-weight:650; letter-spacing:-.01em; }
+  .icon-btn{ flex:none; width:32px; height:32px; display:grid; place-items:center; color:var(--muted); background:transparent;
+    border:1px solid var(--line); border-radius:8px; cursor:pointer; font-size:14px; line-height:1; }
+  .icon-btn:hover{ color:var(--ink); border-color:var(--accent); }
+  .icon-btn:focus-visible, .primary:focus-visible, .app-open:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
+  .primary{ margin:0 16px 12px; padding:9px 12px; color:var(--accent-ink); background:var(--accent); border:0; border-radius:9px;
+    font-weight:650; cursor:pointer; }
+  .primary:hover{ filter:brightness(1.07); }
+  .section-title{ padding:6px 16px; font-size:11px; letter-spacing:.18em; text-transform:uppercase; color:var(--muted); }
+  #apps{ list-style:none; margin:0; padding:0 8px 8px; overflow:auto; flex:1; min-height:60px; }
+  #apps li{ display:flex; align-items:center; gap:2px; border-radius:8px; }
+  #apps li:hover, #apps li.open{ background:var(--panel-2); }
+  .app-open{ flex:1; min-width:0; text-align:left; background:transparent; border:0; color:var(--ink); padding:8px 8px; cursor:pointer;
+    border-radius:8px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  #apps li.open .app-open::before{ content:"●"; color:var(--ok); margin-right:7px; font-size:9px; vertical-align:2px; }
+  .row-btn{ flex:none; width:28px; height:28px; display:grid; place-items:center; background:transparent; border:0; border-radius:6px;
+    color:var(--muted); cursor:pointer; opacity:0; }
+  #apps li:hover .row-btn, #apps li:focus-within .row-btn{ opacity:1; }
+  .row-btn:hover{ color:var(--ink); background:var(--line); }
+  .row-btn.del:hover{ color:var(--danger); }
+  @media (hover:none){ .row-btn{ opacity:1; } }
+  .empty-lib{ padding:10px 16px; color:var(--muted); font-family:var(--sans); font-size:13px; }
+  .sysbus{ border-top:1px solid var(--line); padding:10px 12px 12px; font-size:11px; color:var(--muted); max-height:170px; overflow:auto; }
+  .sysbus .line{ white-space:pre-wrap; word-break:break-word; padding:1px 0; }
+  .sysbus .line.danger{ color:var(--danger); }
+
+  /* ── Escritorio en mosaico (master-stack) ──────────────────────────────── */
+  #desk{ display:grid; gap:var(--gap); padding:var(--gap); min-height:0; min-width:0;
+    background-image:radial-gradient(900px 500px at 70% -10%, color-mix(in srgb, var(--accent) 7%, transparent), transparent 60%); }
+  .placeholder[hidden]{ display:none; }
+  .placeholder{ grid-column:1/-1; grid-row:1/-1; display:grid; place-items:center; text-align:center; color:var(--muted); font-family:var(--sans); }
+  .placeholder strong{ display:block; color:var(--ink); font-family:var(--mono); font-size:16px; margin-bottom:4px; }
+  .win{ grid-column:var(--col,auto); grid-row:var(--row,auto); display:flex; flex-direction:column; min-height:0; min-width:0;
+    background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); overflow:hidden; }
+  .win.focus{ border-color:color-mix(in srgb, var(--accent) 60%, var(--line)); }
+  .win[hidden]{ display:none; }
+  .win-bar{ display:flex; align-items:center; gap:6px; padding:6px 6px 6px 12px; border-bottom:1px solid var(--line); background:var(--panel-2); }
+  .win-title{ flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13px; font-weight:600; }
+  .win-title .caps{ color:var(--muted); font-weight:400; margin-left:6px; font-size:11.5px; }
+  .win-bar .icon-btn{ width:28px; height:28px; font-size:13px; }
+  .win-bar .icon-btn.close:hover{ color:var(--danger); border-color:var(--danger); }
+  .win-body{ flex:1; min-height:0; overflow:auto; padding:14px; }
+  .win-bus{ border-top:1px solid var(--line); font-size:11.5px; }
+  .win-bus summary{ cursor:pointer; padding:5px 12px; color:var(--muted); user-select:none; }
+  .win-bus summary:hover{ color:var(--ink); }
+  .win-bus .lines{ max-height:140px; overflow:auto; padding:0 12px 8px; }
+  .win-bus .line{ white-space:pre-wrap; word-break:break-word; padding:1px 0; }
+  .win-bus .line.danger{ color:var(--danger); }
+  .err{ color:var(--danger); white-space:pre-wrap; font-size:13px; }
+
+  @media (max-width:760px){
+    .shell{ grid-template-columns:1fr; grid-template-rows:auto minmax(0,1fr); height:auto; min-height:100dvh; }
+    aside{ border-right:0; border-bottom:1px solid var(--line); }
+    #apps{ max-height:220px; }
+    .sysbus{ display:none; }
+    #desk{ grid-template-columns:1fr !important; grid-template-rows:none !important; grid-auto-rows:minmax(420px,auto); }
+    .win{ grid-column:auto; grid-row:auto; }
+  }
+
+  /* ── Diálogo "Nueva app" / "Editar" ────────────────────────────────────── */
+  dialog{ width:min(760px, calc(100vw - 32px)); padding:0; color:var(--ink); background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); }
+  dialog::backdrop{ background:rgb(0 0 0 / .5); }
+  .dlg-head{ padding:14px 16px; border-bottom:1px solid var(--line); font-weight:650; }
+  .dlg-body{ padding:14px 16px; display:flex; flex-direction:column; gap:10px; }
+  .dlg-body label{ font-size:12px; color:var(--muted); }
+  .dlg-body textarea{ width:100%; height:min(52vh,460px); resize:vertical; font-family:var(--mono); font-size:12.5px; color:var(--ink);
+    background:var(--panel-2); border:1px solid var(--line); border-radius:9px; padding:12px; }
+  .dlg-msg{ min-height:1.4em; font-size:12.5px; color:var(--danger); white-space:pre-wrap; }
+  .dlg-foot{ display:flex; justify-content:flex-end; gap:8px; padding:12px 16px; border-top:1px solid var(--line); }
+  .ghost{ padding:8px 14px; background:transparent; color:var(--ink); border:1px solid var(--line); border-radius:9px; cursor:pointer; }
+  .ghost:hover{ border-color:var(--accent); }
+  .dlg-foot .primary{ margin:0; }
+
+  /* ── Modo servidor: sesión, runner, vista de un programa, versiones ────── */
+  .login{ display:flex; flex-direction:column; gap:8px; padding:0 16px 12px; }
+  .login label{ font-size:12px; color:var(--muted); }
+  .login input, .info-row input, .info-row select{ font:inherit; font-size:13px; color:var(--ink); background:var(--panel-2);
+    border:1px solid var(--line); border-radius:9px; padding:8px 10px; min-width:0; }
+  .login .primary{ margin:0; }
+  .login[hidden], #lib[hidden], .session[hidden]{ display:none; }
+  #lib{ display:flex; flex-direction:column; min-height:0; flex:1; }
+  .session{ display:flex; align-items:center; justify-content:space-between; gap:8px; padding:8px 16px; border-top:1px solid var(--line);
+    font-size:12.5px; color:var(--muted); }
+  .session span::before{ content:"● "; color:var(--ok); }
+  .ghost.small{ padding:4px 10px; font-size:12.5px; border-radius:7px; text-decoration:none; display:inline-block; }
+  .app-open .ver{ margin-left:8px; color:var(--muted); font-size:11px; }
+  .win-body.framed{ padding:0; overflow:hidden; }
+  iframe.runner{ display:block; width:100%; height:100%; border:0; background:var(--panel); }
+  .dlg-msg.ok{ color:var(--ok); }
+  .info-row{ display:flex; align-items:center; gap:8px; }
+  .info-row label{ flex:none; }
+  .info-row input, .info-row select{ flex:1; }
+  .versions{ list-style:none; margin:0; padding:0; max-height:min(46vh,380px); overflow:auto; display:flex; flex-direction:column; gap:6px; }
+  .versions li{ display:flex; align-items:center; gap:8px; padding:8px 10px; border:1px solid var(--line); border-radius:9px; background:var(--panel-2); }
+  .versions .v-text{ flex:1; min-width:0; font-size:12.5px; }
+  .versions .v-text span{ color:var(--muted); }
+  .versions .v-note{ font-family:var(--sans); color:var(--muted); overflow-wrap:anywhere; }
+  .shell[hidden], .viewer[hidden]{ display:none; }
+  .viewer{ display:flex; flex-direction:column; height:100vh; height:100dvh; }
+  .viewer-bar{ display:flex; align-items:center; gap:10px; padding:8px 12px; background:var(--panel); border-bottom:1px solid var(--line); }
+  .viewer-title{ flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:600; }
+  .viewer-title .caps{ color:var(--muted); font-weight:400; margin-left:6px; font-size:12px; }
+  .viewer-body{ flex:1; min-height:0; }
+  .viewer-body .err{ margin:16px; }
+  .viewer-login{ max-width:420px; margin:40px auto; padding:16px; background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); }
+  .viewer-login p{ margin:0 0 12px; font-family:var(--sans); }
+  .viewer-login .login{ padding:0; }
+</style>
+</head>
+<body>
+<div class="shell" id="shell">
+  <aside aria-label="Biblioteca de apps">
+    <div class="brand">
+      <div><div class="eyebrow">StardustLang</div><h1>Playground</h1></div>
+      <button class="icon-btn" id="theme" type="button" title="Cambiar tema" aria-label="Cambiar tema">◐</button>
+    </div>
+    <form class="login" id="login" hidden>
+      <label for="login-token">Token de acceso</label>
+      <input id="login-token" type="password" autocomplete="off" spellcheck="false" placeholder="sd_…" required>
+      <button class="primary" type="submit">Entrar</button>
+      <div class="dlg-msg" id="login-msg" role="alert"></div>
+    </form>
+    <div id="lib">
+      <button class="primary" id="new" type="button">＋ Nueva app</button>
+      <div class="section-title" id="lib-title">Apps guardadas</div>
+      <ul id="apps"></ul>
+    </div>
+    <div class="session" id="session" hidden>
+      <span id="session-user"></span>
+      <button class="ghost small" id="logout" type="button">Salir</button>
+    </div>
+    <div class="sysbus" id="sysbus" aria-label="Bus de la biblioteca"></div>
+  </aside>
+
+  <main id="desk" aria-label="Escritorio">
+    <div class="placeholder" id="placeholder">
+      <div><strong id="placeholder-title">Sin ventanas abiertas</strong><span id="placeholder-text">Abre una app de la biblioteca o crea una nueva.</span></div>
+    </div>
+  </main>
+</div>
+
+<div class="viewer" id="viewer" hidden>
+  <header class="viewer-bar">
+    <div class="viewer-title"><span id="viewer-title"></span><span class="caps" id="viewer-meta"></span></div>
+    <a class="ghost small" href="/" id="viewer-home">Abrir el playground</a>
+  </header>
+  <div class="viewer-body" id="viewer-body"></div>
+</div>
+
+<dialog id="dlg">
+  <form method="dialog" id="dlg-form">
+    <div class="dlg-head" id="dlg-title">Nueva app</div>
+    <div class="dlg-body">
+      <label for="dlg-src">Escribe un programa StardustLang en texto (<code>.stardust</code>) o en JSON. Se guarda con el nombre que declara (<code>app nombre</code>).</label>
+      <textarea id="dlg-src" spellcheck="false"></textarea>
+      <div class="dlg-msg" id="dlg-msg" role="alert"></div>
+    </div>
+    <div class="dlg-foot">
+      <button class="ghost" type="button" id="dlg-cancel">Cancelar</button>
+      <button class="primary" type="submit" id="dlg-save">Guardar y abrir</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="info">
+  <div class="dlg-head" id="info-title"></div>
+  <div class="dlg-body">
+    <div class="info-row">
+      <label for="info-vis">Visibilidad</label>
+      <select id="info-vis">
+        <option value="private">Privada: solo tú</option>
+        <option value="link">Cualquiera con el enlace</option>
+      </select>
+    </div>
+    <div class="info-row">
+      <input id="info-url" readonly aria-label="Enlace del programa">
+      <button class="ghost small" id="info-copy" type="button">Copiar</button>
+    </div>
+    <div class="section-title">Versiones</div>
+    <ul class="versions" id="info-versions"></ul>
+    <div class="dlg-msg" id="info-msg" role="alert"></div>
+  </div>
+  <div class="dlg-foot">
+    <button class="ghost" type="button" id="info-close">Cerrar</button>
+  </div>
+</dialog>
+
+<script type="module">
+/*__GLUE__*/
+
+/*__RUNTIME__*/
+
+const BIBLIO_SRC = `__BIBLIO__`;
+
+// Configuración que inyecta stardust-server. Sin servidor (HTML abierto suelto)
+// queda null: modo local, con la Biblioteca en IndexedDB.
+const CONFIG = /*__STARDUST_CONFIG__*/null;
+const SERVER = !!(CONFIG && CONFIG.server);
+
+// Programa de partida para "Nueva app": un contador con vista (MVU).
+const STARTER = `app contador
+
+actor Contador:
+  start:
+    n = 0
+  on m:
+    n = n + m
+  view:
+    column:
+      label(n)
+      row:
+        button('−1', send=-1)
+        button('+1', send=1)
+`;
+
+const $=(id)=>document.getElementById(id);
+
+// ── Tema ────────────────────────────────────────────────────────────────────
+const prefersDark=()=>matchMedia("(prefers-color-scheme: dark)").matches;
+let theme=null; try { theme=localStorage.getItem("stardust-theme"); } catch(_){}
+if (theme) document.documentElement.dataset.theme=theme;   // antes de cargar el WASM: sin parpadeo
+const applyTheme=()=>{
+  if (theme) document.documentElement.dataset.theme=theme; else delete document.documentElement.dataset.theme;
+  forEachRunner(w=>w.postMessage({ type:"theme", theme }, CONFIG.runnerOrigin));
+};
+$("theme").addEventListener("click",()=>{ const dark = theme ? theme==="dark" : prefersDark();
+  theme = dark ? "light" : "dark"; try { localStorage.setItem("stardust-theme", theme); } catch(_){} applyTheme(); });
+
+// ── Utilidades ──────────────────────────────────────────────────────────────
+function traceLine(container, line){
+  const d=document.createElement("div"); d.className="line";
+  // Un mensaje puede llevar un programa entero (guardar): se recorta en pantalla.
+  const flat=line.replace(/\s+/g, " ");
+  d.textContent = flat.length>220 ? flat.slice(0,217)+"…" : flat; if (flat!==line || flat.length>220) d.title=line;
+  if (/FALLO|denegad|error(?!: null)|✗/i.test(line)) d.classList.add("danger");
+  container.appendChild(d);
+  while (container.childElementCount>300) container.firstChild.remove();
+  container.scrollTop=container.scrollHeight;
+}
+const sysTrace=(line)=>traceLine($("sysbus"), line);
+const errText=(e)=>String(e && e.message ? e.message : e);
+const slug=(s)=>String(s||"").trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0,40).replace(/-+$/,"") || "app";
+const fmtDate=(iso)=>{ try { return new Date(iso).toLocaleString(); } catch(_){ return iso; } };
+
+/** Capacidades de un programa: { actors: {Actor: [...]}, net_allow: [...] }. */
+function capabilitiesOf(ir){
+  const actors={}; for (const a of (ir && ir.actors) || []) actors[a.name]=a.capabilities||[];
+  return { actors, net_allow:(ir && ir.net_allow)||[] };
+}
+const capsText=(caps)=>[...new Set(Object.values((caps && caps.actors)||{}).flat())].join(" · ");
+
+/** Valida con la VM (WASM), sin red: `.stardust` o JSON. */
+function validateLocal(text){
+  const isJson=text.trimStart().startsWith("{");
+  let r; try { r=JSON.parse(isJson ? check_program(text) : compile_program(text)); } catch(e){ r={ ok:false, errors:[{ message:errText(e) }] }; }
+  let ir=null;
+  if (r.ok) ir = isJson ? JSON.parse(text) : r.ir;
+  return { ok:!!r.ok, errors:r.errors||[], warnings:r.warnings||[], ir, format: isJson ? "json" : "stardust" };
+}
+const issueText=(i)=>(i.line ? `línea ${i.line}: ` : i.path ? `${i.path}: ` : "")+i.message;
+const issuesText=(list)=>list.map(issueText).join("\n");
+
+await __wbg_init({ module_or_path: b64ToBytes("__WASM__") });
+
+// ── Runner (modo servidor): cada app corre en un iframe de otro origen ──────
+const runners=new Map();   // contentWindow → handler(msg)
+function forEachRunner(fn){ if (SERVER) runners.forEach((_,w)=>{ try { fn(w); } catch(_){} }); }
+window.addEventListener("message",(e)=>{
+  if (!SERVER || e.origin!==CONFIG.runnerOrigin) return;
+  const h=runners.get(e.source); if (h) h(e.data || {});
+});
+
+/**
+ * Monta un runner en `container` y, cuando avisa de que está listo, le manda el
+ * programa. `opts`: { key, title, ir, capabilities, trusted, onTrace }.
+ * Devuelve una función que lo desmonta.
+ */
+function mountRunner(container, opts){
+  const f=document.createElement("iframe");
+  f.className="runner"; f.title=opts.title; f.src=CONFIG.runnerOrigin+"/run/";
+  // Sin allow-top-navigation: un programa no puede llevarse la pestaña a otra página.
+  f.setAttribute("sandbox","allow-scripts allow-same-origin allow-forms allow-popups allow-downloads");
+  container.replaceChildren(f);
+  runners.set(f.contentWindow, (msg)=>{
+    if (msg.type==="ready") f.contentWindow.postMessage({ type:"load", key:opts.key, title:opts.title, ir:opts.ir,
+      capabilities:opts.capabilities, trusted:opts.trusted, theme }, CONFIG.runnerOrigin);
+    else if (msg.type==="trace" && typeof msg.line==="string") opts.onTrace(msg.line);
+    else if (msg.type==="error") opts.onTrace("✗ "+msg.message);
+  });
+  return ()=>{ runners.delete(f.contentWindow); f.remove(); };
+}
+
+/** Borra los datos (IndexedDB del origen del runner) de un programa. */
+function dropRunnerData(key){
+  return new Promise((resolve)=>{
+    const f=document.createElement("iframe"); f.hidden=true; f.src=CONFIG.runnerOrigin+"/run/";
+    f.setAttribute("sandbox","allow-scripts allow-same-origin");
+    document.body.appendChild(f);
+    const done=()=>{ runners.delete(f.contentWindow); f.remove(); clearTimeout(timer); resolve(); };
+    const timer=setTimeout(done, 5000);
+    runners.set(f.contentWindow, (msg)=>{
+      if (msg.type==="ready") f.contentWindow.postMessage({ type:"drop", key }, CONFIG.runnerOrigin);
+      else if (msg.type==="dropped") done();
+    });
+  });
+}
+
+// ── API (modo servidor; la sesión va en una cookie HttpOnly) ────────────────
+async function api(method, path, body){
+  const init={ method, headers:{}, credentials:"same-origin" };
+  if (body!==undefined){ init.headers["Content-Type"]="application/json"; init.body=JSON.stringify(body); }
+  let r; try { r=await fetch("/api/v1"+path, init); } catch(e){ return { status:0, ok:false, data:{ error:{ message:"sin conexión: "+errText(e) } } }; }
+  let data=null; try { data=await r.json(); } catch(_){}
+  return { status:r.status, ok:r.ok, data };
+}
+const apiError=(r)=>(r.data && r.data.error && r.data.error.message) || ("HTTP "+r.status);
+
+let me=null;   // usuario con sesión (modo servidor)
+
+async function login(token){
+  const r=await api("POST","/session",{ token });
+  if (!r.ok) throw new Error(apiError(r));
+  me=r.data.user;
+}
+
+// ── Biblioteca: dos implementaciones con la misma interfaz ──────────────────
+//   items()          → [{ id, label, version?, visibility? }]
+//   load(id, n?)     → { source, ir, capabilities, format, version?, owner? }
+//   save(id, text, base) → { id } | lanza Error con .report / .conflict
+//   remove(id)
+//   dataKey(id)      → nombre del disco de la app
+const Local = (()=>{
+  // La biblioteca local es un programa StardustLang (programs/biblioteca.json):
+  // toda escritura pasa por la capacidad FILE del actor (visible en el bus); el
+  // host solo le envía mensajes y espeja su VFS a IndexedDB.
+  let biblio=null, disk=null;
+  const label=(file)=>file.replace(/\.(json|stardust)$/i, "");
+  async function init(){
+    biblio=new Engine(BIBLIO_SRC);
+    disk=openStardustDisk("stardust-biblioteca");
+    (await disk.mount(biblio)).forEach(sysTrace);
+  }
+  async function send(msg){
+    const res=JSON.parse(biblio.event("Biblioteca", JSON.stringify(msg)));
+    (res.trace||[]).forEach(sysTrace);
+    await disk.mirror(biblio);
+  }
+  function read(file){ const b=biblio.vfs_get(file); return b ? new TextDecoder().decode(b) : null; }
+  function items(){
+    const st=JSON.parse(biblio.state_json());
+    return ((st.Biblioteca && st.Biblioteca.memory.programas) || [])
+      .filter(p=>typeof p==="string" && /\.(json|stardust)$/i.test(p)).map(f=>({ id:f, label:label(f) }));
+  }
+  async function load(file){
+    const source=read(file);
+    if (source===null) throw new Error("no existe '"+file+"' en la biblioteca");
+    const v=validateLocal(source);
+    if (!v.ok) throw new Error(issuesText(v.errors));
+    return { source, ir:v.ir, capabilities:capabilitiesOf(v.ir), format:v.format };
+  }
+  async function save(file, text){
+    const v=validateLocal(text);
+    const target=slug(v.ir.program)+"."+(v.format==="json" ? "json" : "stardust");
+    if (!file && items().some(i=>i.id===target) && !confirm(`Ya existe «${label(target)}». ¿Reemplazarla?`)) return null;
+    await send({ cmd:"guardar", nombre:target, fuente:text });
+    if (file && file!==target) await send({ cmd:"borrar", nombre:file });
+    return { id:target };
+  }
+  async function remove(file){
+    await send({ cmd:"borrar", nombre:file });
+    await dropStardustDisk("stardust-run:"+label(file));
+  }
+  return { init, items, load, save, remove, label, dataKey:(file)=>label(file), editable:()=>true };
+})();
+
+const Remote = (()=>{
+  let cache=[];
+  async function refresh(){
+    const r=await api("GET","/programs");
+    if (!r.ok) throw new Error(apiError(r));
+    cache=r.data.programs.map(p=>({ id:p.owner+"/"+p.name, label:p.name, version:p.current_version, visibility:p.visibility }));
+  }
+  async function load(id, n){
+    const r=await api("GET", n ? `/programs/${id}/versions/${n}` : `/programs/${id}`);
+    if (!r.ok) throw Object.assign(new Error(apiError(r)), { status:r.status });
+    const v = n ? r.data : r.data.version;
+    return { source:v.source, ir:v.ir, capabilities:v.capabilities, format:v.format, version:v.n,
+      current: n ? null : r.data.current_version, owner:id.split("/")[0] };
+  }
+  /** Instala (id null) o actualiza sobre `base`. `force` sobrescribe. */
+  async function save(id, text, base, force){
+    const r = id
+      ? await api("POST", `/programs/${id}/versions`, force ? { source:text, force:true } : { source:text, base_version:base })
+      : await api("POST", "/programs", { source:text });
+    if (r.ok){
+      const p=r.data.program;
+      sysTrace(r.data.unchanged ? `= ${p.owner}/${p.name} sin cambios (v${p.current_version})`
+        : `✓ ${p.owner}/${p.name} guardada · v${p.current_version}`+(r.data.capabilities_changed ? " · pide capacidades nuevas" : ""));
+      await refresh();
+      return { id:p.owner+"/"+p.name };
+    }
+    const e=new Error(apiError(r));
+    if (r.data && r.data.report) e.report=r.data.report;
+    if (r.data && r.data.error) { e.code=r.data.error.code; e.current=r.data.error.current_version; }
+    throw e;
+  }
+  async function remove(id){
+    const r=await api("DELETE", `/programs/${id}`);
+    if (!r.ok) throw new Error(apiError(r));
+    sysTrace("✓ "+id+" borrada");
+    await dropRunnerData(id);
+    await refresh();
+  }
+  return { refresh, items:()=>cache, load, save, remove, label:(id)=>id.split("/")[1], dataKey:(id)=>id,
+    editable:(id)=>!!me && id.split("/")[0]===me.handle };
+})();
+
+const lib = SERVER ? Remote : Local;
+
+// ── Escritorio: ventanas en mosaico ─────────────────────────────────────────
+const desk=$("desk");
+const windows=new Map();          // clave de ventana → { el, rt, disk, unmount, maximized }
+
+function layout(){
+  const wins=[...windows.values()];
+  $("placeholder").hidden = wins.length>0;
+  const max=wins.find(w=>w.maximized);
+  const n=wins.length;
+  desk.style.gridTemplateColumns = (max || n<=1) ? "minmax(0,1fr)" : "minmax(0,1.25fr) minmax(0,1fr)";
+  desk.style.gridTemplateRows = (max || n<=1) ? "minmax(0,1fr)" : `repeat(${n-1}, minmax(0,1fr))`;
+  wins.forEach((w,i)=>{
+    const s=w.el.style;
+    w.el.hidden = !!max && w!==max;
+    w.el.querySelector(".max").textContent = w.maximized ? "❐" : "□";
+    w.el.querySelector(".max").title = w.maximized ? "Restaurar" : "Maximizar";
+    if (max || n===1){ s.setProperty("--col","1 / -1"); s.setProperty("--row","1 / -1"); }
+    else if (i===0){ s.setProperty("--col","1"); s.setProperty("--row",`1 / span ${n-1}`); }
+    else { s.setProperty("--col","2"); s.setProperty("--row",String(i)); }
+  });
+  renderLibrary();
+}
+
+function focusWin(key){
+  windows.forEach((w,k)=>w.el.classList.toggle("focus", k===key));
+}
+
+// Lleva una ventana ya abierta a la posición master (primera del mosaico).
+function promote(key){
+  const w=windows.get(key); if (!w) return;
+  windows.delete(key);
+  const rest=[...windows];
+  windows.clear(); windows.set(key, w); rest.forEach(([k,x])=>windows.set(k,x));
+  layout(); focusWin(key);
+}
+
+/** Abre una app (o una versión concreta, `n`, en modo servidor) en una ventana. */
+async function openApp(id, n){
+  const key = n ? id+"@"+n : id;
+  if (windows.has(key)){ promote(key); return; }
+
+  const el=document.createElement("section"); el.className="win"; el.setAttribute("aria-label", lib.label(id));
+  el.innerHTML=`
+    <div class="win-bar">
+      <div class="win-title"></div>
+      <button class="icon-btn max" type="button" aria-label="Maximizar">□</button>
+      <button class="icon-btn close" type="button" title="Cerrar" aria-label="Cerrar">✕</button>
+    </div>
+    <div class="win-body app-root"></div>
+    <details class="win-bus"><summary>bus · <span class="count">0</span></summary><div class="lines"></div></details>`;
+  const title=el.querySelector(".win-title");
+  title.textContent=lib.label(id)+(n ? " · v"+n : "");
+  const body=el.querySelector(".win-body"), lines=el.querySelector(".lines"), count=el.querySelector(".count");
+  let count_=0;
+  const onTrace=(line)=>{ traceLine(lines, line); count.textContent=String(++count_); };
+
+  const w={ el, rt:null, disk:null, unmount:null, maximized:false };
+  windows.set(key, w);
+  desk.appendChild(el);
+  el.addEventListener("pointerdown",()=>focusWin(key));
+  el.querySelector(".close").addEventListener("click",()=>closeApp(key));
+  el.querySelector(".max").addEventListener("click",()=>{
+    const was=w.maximized; windows.forEach(x=>x.maximized=false); w.maximized=!was; layout();
+  });
+  el.querySelector(".win-bar").addEventListener("dblclick",(e)=>{ if (!e.target.closest("button")) promote(key); });
+  layout(); focusWin(key);
+
+  try {
+    const prog=await lib.load(id, n);
+    const caps=capsText(prog.capabilities);
+    if (caps){ const c=document.createElement("span"); c.className="caps"; c.textContent=caps; title.appendChild(c); }
+    if (SERVER){
+      body.classList.add("framed");
+      w.unmount=mountRunner(body, { key:lib.dataKey(id), title:id+(n ? " · v"+n : ""), ir:prog.ir,
+        capabilities:prog.capabilities, trusted:lib.editable(id), onTrace });
+    } else {
+      w.disk=openStardustDisk("stardust-run:"+lib.dataKey(id));
+      w.rt=createStardustRuntime({ source:JSON.stringify(prog.ir), rootEl:body, onTrace, mirror:(engine)=>w.disk.mirror(engine) });
+      (await w.disk.mount(w.rt.engine)).forEach(onTrace);
+      await w.rt.start();
+    }
+  } catch (e){
+    const d=document.createElement("div"); d.className="err"; d.textContent="No se pudo ejecutar el programa:\n"+errText(e);
+    body.replaceChildren(d);
+  }
+}
+
+function closeApp(key){
+  const w=windows.get(key); if (!w) return;
+  windows.delete(key);
+  w.el.remove();
+  if (w.unmount) w.unmount();
+  if (w.disk) w.disk.close();
+  if (w.rt) try { w.rt.engine.free(); } catch(_){}
+  layout();
+}
+
+/** Cierra todas las ventanas de una app (la actual y sus versiones). */
+function closeAll(id){ [...windows.keys()].filter(k=>k===id || k.startsWith(id+"@")).forEach(closeApp); }
+
+// ── Panel lateral ───────────────────────────────────────────────────────────
+function rowButton(text, label, onClick, extra){
+  const b=document.createElement("button"); b.type="button"; b.className="row-btn"+(extra ? " "+extra : "");
+  b.textContent=text; b.title=b.ariaLabel=label; b.addEventListener("click", onClick); return b;
+}
+
+function renderLibrary(){
+  const ul=$("apps"); ul.replaceChildren();
+  const list=lib.items();
+  if (!list.length){
+    const li=document.createElement("li"); li.className="empty-lib"; li.textContent="Aún no hay apps. Crea la primera con «Nueva app».";
+    ul.appendChild(li); return;
+  }
+  for (const it of list){
+    const li=document.createElement("li"); if (windows.has(it.id)) li.className="open";
+    const open=document.createElement("button"); open.type="button"; open.className="app-open"; open.title="Abrir "+it.label;
+    open.textContent=it.label;
+    if (it.version){ const v=document.createElement("span"); v.className="ver"; v.textContent="v"+it.version+(it.visibility==="link" ? " · 🔗" : ""); open.appendChild(v); }
+    open.addEventListener("click",()=>openApp(it.id));
+    li.append(open, rowButton("✎", "Editar "+it.label, ()=>openEditor(it.id)));
+    if (SERVER) li.append(rowButton("ⓘ", "Versiones y enlace de "+it.label, ()=>openInfo(it.id)));
+    li.append(rowButton("🗑", "Borrar "+it.label, ()=>deleteApp(it.id), "del"));
+    ul.appendChild(li);
+  }
+}
+
+async function deleteApp(id){
+  if (!confirm(`¿Borrar «${lib.label(id)}»?\n`+(SERVER ? "Se borran todas sus versiones del servidor y los datos que la app guardó en este navegador."
+    : "También se borran los datos que la app guardó."))) return;
+  closeAll(id);
+  try { await lib.remove(id); } catch(e){ sysTrace("✗ "+errText(e)); }
+  renderLibrary();
+}
+
+// ── Diálogo: nueva app / editar ─────────────────────────────────────────────
+const dlg=$("dlg"), src=$("dlg-src"), msg=$("dlg-msg");
+let editing=null;    // { id, base } de la app que se edita, o null si es nueva
+
+function showCheck(){
+  const text=src.value.trim();
+  if (!text){ msg.textContent=""; return null; }
+  const v=validateLocal(text);
+  msg.classList.toggle("ok", v.ok);
+  msg.textContent = v.ok ? "✓ válido"+(v.warnings.length ? "\n"+issuesText(v.warnings) : "") : issuesText(v.errors);
+  return v;
+}
+let checkTimer=null;
+src.addEventListener("input",()=>{ clearTimeout(checkTimer); checkTimer=setTimeout(showCheck, 300); });
+
+async function openEditor(id){
+  let text=STARTER, base=null;
+  if (id){
+    try {
+      const p=await lib.load(id);
+      text=p.source; base=p.current || null;
+      if (p.format==="json") try { text=JSON.stringify(JSON.parse(text), null, 2); } catch(_){}
+    } catch(e){ sysTrace("✗ "+errText(e)); return; }
+  }
+  editing = id ? { id, base } : null;
+  $("dlg-title").textContent = id ? `Editar «${lib.label(id)}»`+(base ? ` (sobre la v${base})` : "") : "Nueva app";
+  $("dlg-save").textContent = id ? "Guardar y reabrir" : "Guardar y abrir";
+  src.value=text; msg.textContent=""; msg.classList.remove("ok");
+  dlg.showModal(); src.focus();
+  showCheck();
+}
+
+$("new").addEventListener("click",()=>openEditor(null));
+$("dlg-cancel").addEventListener("click",()=>dlg.close());
+src.addEventListener("keydown",(e)=>{ if ((e.ctrlKey||e.metaKey) && e.key==="Enter"){ e.preventDefault(); $("dlg-form").requestSubmit(); } });
+
+$("dlg-form").addEventListener("submit", async (e)=>{
+  e.preventDefault();
+  const text=src.value.trim();
+  const v=showCheck();
+  if (!v || !v.ok) return;
+  let saved;
+  try {
+    saved=await lib.save(editing && editing.id, text, editing && editing.base);
+  } catch(err){
+    if (err.code==="version_conflict"){
+      if (!confirm(`Mientras editabas se guardó la versión ${err.current}.\n¿Sobrescribirla con tu versión? (Cancelar para seguir editando)`)) {
+        msg.classList.remove("ok"); msg.textContent=`Hay una versión más nueva (v${err.current}). Copia tus cambios y vuelve a abrir el editor para partir de ella.`;
+        return;
+      }
+      try { saved=await lib.save(editing.id, text, null, true); } catch(e2){ msg.classList.remove("ok"); msg.textContent=errText(e2); return; }
+    } else {
+      msg.classList.remove("ok");
+      msg.textContent = err.report ? issuesText(err.report.errors) : err.code==="program_exists"
+        ? errText(err).replace(/: para cambiarlo usa updateProgram/, "")+".\nÁbrela desde la lista y edítala, o cambia el nombre en «app …»."
+        : errText(err);
+      return;
+    }
+  }
+  if (!saved) return;
+  dlg.close();
+  if (editing) closeAll(editing.id);
+  closeAll(saved.id);
+  renderLibrary();
+  await openApp(saved.id);
+});
+
+// ── Diálogo: versiones y enlace (modo servidor) ─────────────────────────────
+const info=$("info");
+let infoId=null;
+
+async function renderInfo(){
+  const id=infoId, imsg=$("info-msg");
+  const [p, vs]=await Promise.all([api("GET", `/programs/${id}?fields=meta`), api("GET", `/programs/${id}/versions`)]);
+  if (!p.ok || !vs.ok){ imsg.textContent=apiError(p.ok ? vs : p); return; }
+  $("info-title").textContent=id;
+  $("info-vis").value=p.data.visibility;
+  $("info-url").value=p.data.url;
+  const ul=$("info-versions"); ul.replaceChildren();
+  for (const v of vs.data.versions){
+    const li=document.createElement("li");
+    const t=document.createElement("div"); t.className="v-text";
+    const head=document.createElement("strong"); head.textContent="v"+v.n+(v.n===vs.data.current_version ? " · actual" : "");
+    const meta=document.createElement("span"); meta.textContent=" "+fmtDate(v.created_at)+(v.created_by_token ? " · "+v.created_by_token : "");
+    t.append(head, meta);
+    if (v.note){ const note=document.createElement("div"); note.className="v-note"; note.textContent=v.note; t.appendChild(note); }
+    const openB=document.createElement("button"); openB.type="button"; openB.className="ghost small"; openB.textContent="Abrir";
+    openB.addEventListener("click",()=>{ info.close(); openApp(id, v.n===vs.data.current_version ? undefined : v.n); });
+    li.append(t, openB);
+    if (v.n!==vs.data.current_version){
+      const back=document.createElement("button"); back.type="button"; back.className="ghost small"; back.textContent="Volver a esta";
+      back.addEventListener("click", async ()=>{
+        const r=await api("POST", `/programs/${id}/rollback`, { to_version:v.n, base_version:vs.data.current_version });
+        if (!r.ok){ imsg.textContent=apiError(r); await renderInfo(); return; }
+        sysTrace(`✓ ${id} vuelve a la v${v.n} (nueva v${r.data.program.current_version})`);
+        closeAll(id); await Remote.refresh(); renderLibrary(); await renderInfo();
+      });
+      li.appendChild(back);
+    }
+    ul.appendChild(li);
+  }
+}
+
+async function openInfo(id){
+  infoId=id; $("info-msg").textContent=""; $("info-versions").replaceChildren();
+  info.showModal();
+  await renderInfo();
+}
+$("info-close").addEventListener("click",()=>info.close());
+$("info-vis").addEventListener("change", async (e)=>{
+  const r=await api("PATCH", `/programs/${infoId}`, { visibility:e.target.value });
+  $("info-msg").textContent = r.ok ? "" : apiError(r);
+  await Remote.refresh(); renderLibrary(); await renderInfo();
+});
+$("info-copy").addEventListener("click", async ()=>{
+  try { await navigator.clipboard.writeText($("info-url").value); $("info-copy").textContent="Copiado"; }
+  catch(_){ $("info-url").select(); }
+  setTimeout(()=>{ $("info-copy").textContent="Copiar"; }, 1500);
+});
+
+// ── Sesión (modo servidor) ──────────────────────────────────────────────────
+function showSession(){
+  const logged=!!me;
+  $("login").hidden=logged;
+  $("lib").hidden=!logged;
+  $("session").hidden=!logged;
+  $("session-user").textContent = logged ? me.handle : "";
+  $("placeholder-title").textContent = logged ? "Sin ventanas abiertas" : "Inicia sesión";
+  $("placeholder-text").textContent = logged ? "Abre una app de la biblioteca o crea una nueva."
+    : "Pega tu token de acceso en el panel. Te lo da quien administra este servidor.";
+}
+
+/** Formulario de token; `after` se ejecuta al iniciar sesión. */
+function wireLogin(after){
+  $("login").addEventListener("submit", async (e)=>{
+    e.preventDefault();
+    $("login-msg").textContent="";
+    try { await login($("login-token").value); $("login-token").value=""; await after(); }
+    catch(err){ $("login-msg").textContent=errText(err); }
+  });
+}
+
+$("logout").addEventListener("click", async ()=>{
+  await api("DELETE","/session");
+  me=null;
+  [...windows.keys()].forEach(closeApp);
+  sysTrace("sesión cerrada");
+  showSession(); renderLibrary();
+});
+
+// ── Vista de un programa: /p/{owner}/{name}[/v/{n}] ─────────────────────────
+async function showViewer(owner, name, n){
+  $("shell").hidden=true; $("viewer").hidden=false;
+  const id=owner+"/"+name;
+  $("viewer-title").textContent=id+(n ? " · v"+n : "");
+  document.title=id+" · StardustLang";
+  const body=$("viewer-body");
+  let prog;
+  try { prog=await Remote.load(id, n); }
+  catch(e){
+    if (e.status===404 && !me){
+      const box=document.createElement("div"); box.className="viewer-login";
+      const p=document.createElement("p"); p.textContent="Este programa no existe o es privado. Si es tuyo, inicia sesión.";
+      const form=$("login");   // se mueve aquí desde el panel lateral (oculto en esta vista)
+      box.append(p, form); form.hidden=false;
+      body.replaceChildren(box);
+      wireLogin(async ()=>{ form.hidden=true; await showViewer(owner, name, n); });
+      return;
+    }
+    const d=document.createElement("div"); d.className="err"; d.textContent = e.status===404 ? "Este programa no existe o es privado." : errText(e);
+    body.replaceChildren(d); return;
+  }
+  $("viewer-meta").textContent=" v"+prog.version+(capsText(prog.capabilities) ? " · "+capsText(prog.capabilities) : "");
+  mountRunner(body, { key:id, title:id, ir:prog.ir, capabilities:prog.capabilities,
+    trusted:!!me && me.handle===owner, onTrace:()=>{} });
+}
+
+// ── Arranque ────────────────────────────────────────────────────────────────
+applyTheme();
+if (SERVER){
+  const r=await api("GET","/me");
+  me = r.ok ? r.data.user : null;
+  const m=location.pathname.match(/^\/p\/([a-z0-9-]+)\/([a-z0-9-]+)(?:\/v\/(\d+))?\/?$/);
+  if (m){
+    await showViewer(m[1], m[2], m[3] ? Number(m[3]) : undefined);
+  } else {
+    if (CONFIG.devMode) sysTrace("modo desarrollo: el runner comparte origen con la app");
+    const start=async ()=>{ showSession(); if (me){ await Remote.refresh(); sysTrace("sesión de "+me.handle); } renderLibrary(); };
+    wireLogin(start);
+    try { await start(); } catch(e){ sysTrace("✗ "+errText(e)); }
+  }
+} else {
+  $("lib-title").textContent="Apps guardadas en este navegador";
+  await Local.init();
+  renderLibrary();
+}
+</script>
+</body>
+</html>

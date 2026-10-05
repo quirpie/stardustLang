@@ -1,0 +1,24 @@
+{
+  "program": "geometria",
+  "entry": "Areas",
+  "exports": ["Areas"],
+  "grants": { "cap-geo-123": ["Areas"] },
+  "actors": [
+    {
+      "name": "Areas",
+      "capabilities": [],
+      "on_message": {
+        "bind": "p",
+        "reply_to": "cliente",
+        "expects": { "base": "int", "altura": "int" },
+        "body": [
+          { "op": "DEF_VAR", "name": "b", "value": { "field": "base", "from": { "var": "p" } } },
+          { "op": "DEF_VAR", "name": "h", "value": { "field": "altura", "from": { "var": "p" } } },
+          { "op": "MATH", "target": "prod", "operator": "*", "left": { "var": "b" }, "right": { "var": "h" } },
+          { "op": "MATH", "target": "area", "operator": "/", "left": { "var": "prod" }, "right": 2 },
+          { "op": "SEND", "to": { "var": "cliente" }, "value": { "record": { "area": { "var": "area" } } } }
+        ]
+      }
+    }
+  ]
+}

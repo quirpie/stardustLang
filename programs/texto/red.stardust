@@ -1,0 +1,13 @@
+app demo-red
+allow 'https://api.github.com/'
+
+actor Cliente:
+  start:
+    print("Pidiendo un 'zen' a la API de GitHub…")
+    fetch('https://api.github.com/zen', headers={'user-agent': 'StardustVM'})
+  on resp:
+    print('HTTP ', resp.status)
+    if resp.ok:
+      print('zen » ', text(resp.body))
+    else:
+      print('fallo de red » ', resp.error)

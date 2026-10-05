@@ -1,0 +1,12 @@
+target/
+web/pkg/
+web/playground.html
+web/runner.html
+web/renderer-wasm.html
+dist/
+data/
+stardust-data/
+.git/
+*.db
+*.db-wal
+*.db-shm

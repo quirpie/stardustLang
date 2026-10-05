@@ -1,0 +1,53 @@
+[package]
+name = "stardust-vm"
+version = "0.1.0"
+edition = "2021"
+description = "StardustVM — núcleo asíncrono por actores para el bytecode StardustLang (Nano POC)"
+
+[lib]
+name = "stardust_vm"
+crate-type = ["cdylib", "rlib"]
+path = "src/lib.rs"
+
+[[bin]]
+name = "stardust"
+path = "src/main.rs"
+
+[[bin]]
+name = "stardust-server"
+path = "src/bin/stardust-server.rs"
+required-features = ["server"]
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+wasm-bindgen = { version = "=0.2.126", optional = true }
+
+# Firma asimétrica (Ed25519) de los mensajes entre nodos (`actor://`). Rust puro,
+# compila a nativo y a wasm; firmar/verificar es determinista (no necesita RNG).
+ed25519-dalek = { version = "2", default-features = false, features = ["alloc"] }
+
+# Servidor de programas (`stardust-server`, feature `server`; ver docs/servidor.md).
+# SQLite se compila dentro (`bundled`): la imagen no necesita la librería del sistema.
+axum = { version = "0.8", default-features = false, features = ["http1", "json", "tokio", "query"], optional = true }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal", "sync", "time", "fs"], optional = true }
+rusqlite = { version = "0.40.2", features = ["bundled"], optional = true }
+getrandom = { version = "0.2", features = ["std"], optional = true }
+
+# Cliente HTTP del host nativo para la capacidad `NET`. Se excluye del build a
+# wasm32 (el navegador usará `fetch` en la frontera JS, en una rebanada posterior).
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+ureq = "2"
+
+[features]
+# Activa el motor WASM (Engine) para compilar la StardustVM al navegador.
+wasm = ["dep:wasm-bindgen"]
+# Activa el servidor de programas (API, usuarios, versiones). Solo nativo.
+server = ["dep:axum", "dep:tokio", "dep:rusqlite", "dep:getrandom"]
+
+[dev-dependencies]
+serde_json = { version = "1", features = ["preserve_order"] }
+
+[profile.release]
+opt-level = "s"
+lto = true

@@ -1,0 +1,32 @@
+{
+  "program": "demo-red-ui",
+  "entry": "Cliente",
+  "net_allow": ["https://api.github.com/", "https://httpbin.org/"],
+  "actors": [
+    {
+      "name": "Cliente",
+      "capabilities": ["NET"],
+      "on_message": {
+        "bind": "m",
+        "body": [
+          { "op": "COMPARE", "target": "es_pedir", "operator": "==", "left": { "field": "kind", "from": { "var": "m" } }, "right": "pedir" },
+          { "op": "IF_COND", "cond": { "var": "es_pedir" }, "then": [
+            { "op": "DEF_VAR", "name": "estado", "value": "cargando…" },
+            { "op": "DEF_VAR", "name": "url", "value": { "field": "url", "from": { "var": "m" } } },
+            { "op": "NET_FETCH", "method": "GET", "url": { "field": "url", "from": { "var": "m" } } }
+          ] },
+          { "op": "COMPARE", "target": "es_resp", "operator": "==", "left": { "field": "kind", "from": { "var": "m" } }, "right": "net_response" },
+          { "op": "IF_COND", "cond": { "var": "es_resp" }, "then": [
+            { "op": "DEF_VAR", "name": "estado", "value": "listo" },
+            { "op": "DEF_VAR", "name": "status", "value": { "field": "status", "from": { "var": "m" } } },
+            { "op": "DEF_VAR", "name": "ok", "value": { "field": "ok", "from": { "var": "m" } } },
+            { "op": "IF_COND", "cond": { "field": "ok", "from": { "var": "m" } },
+              "then": [ { "op": "DEF_VAR", "name": "cuerpo", "value": { "from_bytes": { "field": "body", "from": { "var": "m" } } } } ],
+              "else": [ { "op": "DEF_VAR", "name": "cuerpo", "value": { "field": "error", "from": { "var": "m" } } } ]
+            }
+          ] }
+        ]
+      }
+    }
+  ]
+}

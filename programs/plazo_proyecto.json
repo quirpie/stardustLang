@@ -1,0 +1,41 @@
+{
+  "program": "planificador-plazos",
+  "entry": "Actor_IO",
+  "actors": [
+    {
+      "name": "Actor_IO",
+      "capabilities": ["IO_STREAM"],
+      "on_start": [
+        { "op": "IO_STREAM", "mode": "out", "prompt": "== Planificador de plazos ==" },
+        { "op": "IO_STREAM", "mode": "in", "target": "inicio", "prompt": "Fecha de inicio (YYYY-MM-DD): " },
+        { "op": "SEND", "to": "Actor_Fechas", "value": { "var": "inicio" } }
+      ],
+      "on_message": {
+        "bind": "result",
+        "body": [
+          { "op": "IO_STREAM", "mode": "out", "value": { "var": "result" } }
+        ]
+      }
+    },
+    {
+      "name": "Actor_Fechas",
+      "capabilities": [],
+      "on_start": [
+        { "op": "DEF_VAR", "name": "meta", "value": { "lit": "2026-12-31", "as": "date" } },
+        { "op": "DEF_VAR", "name": "duracion", "value": 30 }
+      ],
+      "on_message": {
+        "bind": "inicio",
+        "body": [
+          { "op": "MATH", "target": "fin", "operator": "+", "left": { "var": "inicio" }, "right": { "var": "duracion" } },
+          { "op": "MATH", "target": "restante", "operator": "-", "left": { "var": "meta" }, "right": { "var": "inicio" } },
+          { "op": "DEF_VAR", "name": "salida", "value": "Fin (inicio + 30 días): " },
+          { "op": "MATH", "target": "salida", "operator": "+", "left": { "var": "salida" }, "right": { "var": "fin" } },
+          { "op": "MATH", "target": "salida", "operator": "+", "left": { "var": "salida" }, "right": " | Días hasta la meta 2026-12-31: " },
+          { "op": "MATH", "target": "salida", "operator": "+", "left": { "var": "salida" }, "right": { "var": "restante" } },
+          { "op": "SEND", "to": "Actor_IO", "value": { "var": "salida" } }
+        ]
+      }
+    }
+  ]
+}

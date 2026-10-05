@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>StardustVM · Renderer WASM</title>
+<!--
+  web/renderer-wasm.template.html — El renderer del UI-IR con el núcleo Rust.
+
+  Gemelo de web/renderer.html (que porta el intérprete a JS): aquí no hay
+  intérprete en JS. La StardustVM compilada a wasm32 ejecuta el programa y
+  engine.render() devuelve el árbol de widgets YA RESUELTO contra el estado del
+  Actor_UI; web/runtime.js solo lo pinta. La pestaña «UI-IR» muestra ese árbol.
+
+  Marcadores con doble guion bajo (web/build-wasm.sh): PROGRAM, GLUE, RUNTIME, WASM
+-->
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --panel-2:#1b222c; --ink:#e6edf3; --muted:#8b949e;
+    --line:#2a313c; --accent:#e0a458; --accent-ink:#241704; --lcd:#7ee0c8; --lcd-bg:#0a1712;
+    --danger:#f2685f; --ok:#5db98b;
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", "Cascadia Code", Menlo, Consolas, monospace;
+    --sans: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --radius:14px;
+  }
+  @media (prefers-color-scheme: light){
+    :root:not([data-theme="dark"]){
+      --bg:#eef1f5; --panel:#ffffff; --panel-2:#f4f6f9; --ink:#1a2029; --muted:#5a6472;
+      --line:#dce1e8; --accent:#b5761f; --accent-ink:#fff6ea; --lcd:#0f7a63; --lcd-bg:#e7f4ee;
+      --danger:#c14338; --ok:#2f8a5f;
+    }
+  }
+  :root[data-theme="light"]{
+    --bg:#eef1f5; --panel:#ffffff; --panel-2:#f4f6f9; --ink:#1a2029; --muted:#5a6472;
+    --line:#dce1e8; --accent:#b5761f; --accent-ink:#fff6ea; --lcd:#0f7a63; --lcd-bg:#e7f4ee;
+    --danger:#c14338; --ok:#2f8a5f;
+  }
+  *{ box-sizing:border-box; }
+  body{ margin:0; background:var(--bg); color:var(--ink); font-family:var(--mono); line-height:1.5; -webkit-font-smoothing:antialiased;
+    background-image:radial-gradient(1200px 600px at 50% -10%, color-mix(in srgb, var(--accent) 8%, transparent), transparent 60%); }
+  .wrap{ max-width:1080px; margin:0 auto; padding:clamp(20px,4vw,48px) clamp(16px,3vw,32px) 56px; }
+  header.head{ display:flex; align-items:flex-start; justify-content:space-between; gap:16px; margin-bottom:28px; }
+  .eyebrow{ font-size:12px; letter-spacing:.22em; text-transform:uppercase; color:var(--accent); font-weight:600; }
+  h1{ font-size:clamp(22px,3.4vw,30px); margin:.35em 0 .25em; letter-spacing:-.01em; font-weight:650; }
+  .sub{ color:var(--muted); font-family:var(--sans); font-size:14px; max-width:60ch; }
+  .theme-btn{ flex:none; font-family:var(--mono); font-size:12px; color:var(--muted); background:var(--panel); border:1px solid var(--line);
+    border-radius:999px; padding:8px 14px; cursor:pointer; }
+  .theme-btn:hover{ color:var(--ink); border-color:var(--accent); }
+  .device{ display:grid; grid-template-columns:minmax(0,380px) minmax(0,1fr); gap:20px; align-items:start; }
+  @media (max-width:780px){ .device{ grid-template-columns:1fr; } }
+  .panel{ background:var(--panel); border:1px solid var(--line); border-radius:var(--radius); min-width:0; }
+  .app{ padding:18px; }
+  .tabs{ display:flex; gap:4px; padding:6px; border-bottom:1px solid var(--line); }
+  .tab{ font-family:var(--mono); font-size:12px; color:var(--muted); background:transparent; border:0; border-radius:8px; padding:7px 12px; cursor:pointer; }
+  .tab[aria-selected="true"]{ color:var(--ink); background:var(--panel-2); }
+  .tab:hover{ color:var(--ink); }
+  .pane{ padding:14px 16px; height:380px; overflow:auto; font-size:12.5px; }
+  .pane[hidden]{ display:none; }
+  .pane pre{ margin:0; white-space:pre-wrap; word-break:break-word; }
+  #bus .line{ padding:3px 0; white-space:pre-wrap; word-break:break-word; }
+  #bus .line .arrow{ color:var(--accent); }
+  #bus .line.danger{ color:var(--danger); }
+  #bus .empty{ color:var(--muted); font-family:var(--sans); font-style:italic; }
+  .anim{ animation:slidein .18s ease both; }
+  @keyframes slidein{ from{ opacity:0; transform:translateX(-6px); } to{ opacity:1; transform:none; } }
+  .actor-block{ margin-bottom:14px; }
+  .actor-name{ color:var(--accent); }
+  .cap{ color:var(--muted); }
+  .kv{ display:grid; grid-template-columns:auto 1fr; gap:2px 12px; margin-top:6px; }
+  .kv .k{ color:var(--muted); } .kv .v{ overflow-wrap:anywhere; font-variant-numeric:tabular-nums; }
+  .foot{ margin-top:26px; color:var(--muted); font-family:var(--sans); font-size:13px; max-width:70ch; }
+  .sub code, .foot code{ font-family:var(--mono); color:var(--ink); background:var(--panel); padding:1px 6px; border-radius:6px; border:1px solid var(--line); font-size:12px; }
+  .err{ color:var(--danger); white-space:pre-wrap; font-size:13px; }
+
+  /* Widgets (web/runtime.js) */
+  .w-col{ display:flex; flex-direction:column; gap:14px; min-width:0; }
+  .w-row{ display:flex; flex-wrap:wrap; gap:10px; }
+  .w-grid{ display:grid; gap:10px; }
+  .w-list{ display:flex; flex-direction:column; gap:6px; }
+  .w-label{ overflow-wrap:anywhere; }
+  .w-col > .w-label:first-child{ background:var(--lcd-bg); color:var(--lcd); border:1px solid var(--line); border-radius:10px;
+    font-size:clamp(30px,7vw,44px); text-align:right; padding:16px 18px; min-height:1.4em; font-variant-numeric:tabular-nums;
+    overflow:hidden; text-overflow:ellipsis; box-shadow:inset 0 1px 0 color-mix(in srgb, var(--lcd) 22%, transparent); }
+  .w-button{ font-family:var(--mono); font-size:20px; color:var(--ink); background:var(--panel-2); border:1px solid var(--line);
+    border-radius:12px; height:60px; padding:0 8px; cursor:pointer; user-select:none; transition:transform .05s ease, border-color .15s; }
+  .w-button:hover{ border-color:color-mix(in srgb, var(--accent) 50%, var(--line)); }
+  .w-button:active{ transform:translateY(2px); }
+  .w-button:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
+  .w-empty{ color:var(--muted); font-style:italic; }
+  @media (prefers-reduced-motion:reduce){ .anim{ animation:none; } .w-button:active{ transform:none; } }
+</style>
+</head>
+<body>
+<script type="application/json" id="program">
+__PROGRAM__
+</script>
+
+<div class="wrap">
+  <header class="head">
+    <div>
+      <div class="eyebrow">StardustVM · núcleo Rust en WASM</div>
+      <h1 id="title">Renderer web del UI-IR</h1>
+      <div class="sub">La StardustVM compilada a <code>wasm32</code> ejecuta el programa; el árbol de widgets llega resuelto desde Rust y
+        aquí solo se pinta. Cada pulsación es un mensaje en el bus.</div>
+    </div>
+    <button class="theme-btn" id="theme" type="button">tema</button>
+  </header>
+
+  <main class="device">
+    <section class="panel app" id="app" aria-label="Vista"></section>
+    <section class="panel" aria-label="Observabilidad">
+      <div class="tabs" role="tablist">
+        <button class="tab" role="tab" aria-selected="true" data-pane="bus">bus</button>
+        <button class="tab" role="tab" aria-selected="false" data-pane="state">estado</button>
+        <button class="tab" role="tab" aria-selected="false" data-pane="ir">UI-IR</button>
+      </div>
+      <div class="pane" id="bus"><div class="empty">Pulsa una tecla: el evento entra como mensaje al actor.</div></div>
+      <div class="pane" id="state" hidden></div>
+      <div class="pane" id="ir" hidden><pre></pre></div>
+    </section>
+  </main>
+
+  <p class="foot">Mismo programa, mismos resultados que en la terminal (<code>stardust programs/calculadora.json</code>): el intérprete es
+    el mismo código Rust en ambos hosts.</p>
+</div>
+
+<script type="module">
+/*__GLUE__*/
+
+/*__RUNTIME__*/
+
+const $=(id)=>document.getElementById(id);
+const prefersDark=()=>matchMedia("(prefers-color-scheme: dark)").matches;
+let theme=null; try { theme=localStorage.getItem("stardust-theme"); } catch(_){}
+function applyTheme(){ if (theme) document.documentElement.dataset.theme=theme; else delete document.documentElement.dataset.theme;
+  $("theme").textContent=(theme ? theme==="dark" : prefersDark()) ? "☾ oscuro" : "☀ claro"; }
+applyTheme();
+$("theme").addEventListener("click",()=>{ theme=(theme ? theme==="dark" : prefersDark()) ? "light" : "dark";
+  try { localStorage.setItem("stardust-theme", theme); } catch(_){} applyTheme(); });
+document.querySelectorAll(".tab").forEach(t=>t.addEventListener("click",()=>{
+  document.querySelectorAll(".tab").forEach(x=>x.setAttribute("aria-selected", String(x===t)));
+  document.querySelectorAll(".pane").forEach(p=>p.hidden = p.id!==t.dataset.pane);
+}));
+
+function trace(line){
+  const bus=$("bus"); if (bus.querySelector(".empty")) bus.replaceChildren();
+  const d=document.createElement("div"); d.className="line anim";
+  if (/FALLO|error(?!: null)/i.test(line)) d.classList.add("danger");
+  const m=line.match(/^(.*?)( -> )(.*)$/);
+  if (m){ d.append(m[1]); const a=document.createElement("span"); a.className="arrow"; a.textContent=m[2]; d.append(a, m[3]); }
+  else d.textContent=line;
+  bus.appendChild(d); bus.scrollTop=bus.scrollHeight;
+}
+function fmt(v){ const s=JSON.stringify(v); return s.length>160 ? s.slice(0,157)+"…" : s; }
+function inspect(engine){
+  const st=JSON.parse(engine.state_json()); const frag=document.createDocumentFragment();
+  for (const [name, a] of Object.entries(st)){
+    const b=document.createElement("div"); b.className="actor-block";
+    const h=document.createElement("div");
+    const n=document.createElement("span"); n.className="actor-name"; n.textContent=name;
+    const c=document.createElement("span"); c.className="cap"; c.textContent=" ["+(a.capabilities||[]).join(", ")+"]";
+    h.append(n, c);
+    const kv=document.createElement("div"); kv.className="kv";
+    for (const k of Object.keys(a.memory||{}).sort()){
+      const kk=document.createElement("div"); kk.className="k"; kk.textContent=k;
+      const vv=document.createElement("div"); vv.className="v"; vv.textContent=fmt(a.memory[k]); kv.append(kk, vv);
+    }
+    b.append(h, kv); frag.appendChild(b);
+  }
+  $("state").replaceChildren(frag);
+  $("ir").firstElementChild.textContent=JSON.stringify(JSON.parse(engine.render()), null, 2);
+}
+
+const source=$("program").textContent.trim();
+try {
+  const prog=JSON.parse(source);
+  if (prog.program){ $("title").textContent=prog.program; document.title=prog.program+" · StardustVM WASM"; }
+  await __wbg_init({ module_or_path: b64ToBytes("__WASM__") });
+  const rt=createStardustRuntime({ source, rootEl:$("app"), onTrace:trace, mirror:async (engine)=>inspect(engine) });
+  inspect(rt.engine);
+  await rt.start();
+} catch (e){
+  const d=document.createElement("div"); d.className="err"; d.textContent="No se pudo cargar: "+(e && e.message ? e.message : e);
+  $("app").replaceChildren(d);
+}
+</script>
+</body>
+</html>

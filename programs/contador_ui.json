@@ -1,0 +1,33 @@
+{
+  "program": "contador-ui",
+  "entry": "Actor_UI",
+  "actors": [
+    {
+      "name": "Actor_UI",
+      "capabilities": ["RENDER"],
+      "on_start": [ { "op": "DEF_VAR", "name": "count", "value": 0 } ],
+      "on_message": {
+        "bind": "cmd",
+        "body": [
+          { "op": "COMPARE", "target": "isinc", "operator": "==", "left": { "var": "cmd" }, "right": "inc" },
+          { "op": "IF_COND", "cond": { "var": "isinc" }, "then": [ { "op": "MATH", "target": "count", "operator": "+", "left": { "var": "count" }, "right": 1 } ] },
+          { "op": "COMPARE", "target": "isreset", "operator": "==", "left": { "var": "cmd" }, "right": "reset" },
+          { "op": "IF_COND", "cond": { "var": "isreset" }, "then": [ { "op": "ASSIGN", "target": "count", "value": 0 } ] }
+        ]
+      },
+      "view": {
+        "type": "column",
+        "children": [
+          { "type": "label", "text": { "var": "count" } },
+          {
+            "type": "grid", "columns": 2,
+            "children": [
+              { "type": "button", "label": "+1", "send": "inc" },
+              { "type": "button", "label": "Reiniciar", "send": "reset" }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

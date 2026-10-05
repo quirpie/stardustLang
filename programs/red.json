@@ -1,0 +1,48 @@
+{
+  "program": "demo-red",
+  "entry": "Cliente",
+  "net_allow": ["https://api.github.com/"],
+  "actors": [
+    {
+      "name": "Cliente",
+      "capabilities": ["NET", "IO_STREAM"],
+      "on_start": [
+        { "op": "IO_STREAM", "mode": "out", "prompt": "Pidiendo un 'zen' a la API de GitHub…" },
+        {
+          "op": "NET_FETCH",
+          "method": "GET",
+          "url": "https://api.github.com/zen",
+          "headers": { "record": { "user-agent": "StardustVM" } }
+        }
+      ],
+      "on_message": {
+        "bind": "resp",
+        "body": [
+          { "op": "DEF_VAR", "name": "ok", "value": { "field": "ok", "from": { "var": "resp" } } },
+          { "op": "DEF_VAR", "name": "status", "value": { "field": "status", "from": { "var": "resp" } } },
+          { "op": "IO_STREAM", "mode": "out", "prompt": "HTTP ", "value": { "var": "status" } },
+          {
+            "op": "IF_COND",
+            "cond": { "var": "ok" },
+            "then": [
+              {
+                "op": "DEF_VAR",
+                "name": "texto",
+                "value": { "from_bytes": { "field": "body", "from": { "var": "resp" } } }
+              },
+              { "op": "IO_STREAM", "mode": "out", "prompt": "zen › ", "value": { "var": "texto" } }
+            ],
+            "else": [
+              {
+                "op": "IO_STREAM",
+                "mode": "out",
+                "prompt": "fallo de red › ",
+                "value": { "field": "error", "from": { "var": "resp" } }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

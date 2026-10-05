@@ -1,0 +1,2 @@
+# Los scripts de shell necesitan LF: con CRLF, bash falla con "$'\r': command not found".
+*.sh text eol=lf

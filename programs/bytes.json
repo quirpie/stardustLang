@@ -1,0 +1,37 @@
+{
+  "program": "bytes-y-serializacion",
+  "entry": "Actor",
+  "actors": [
+    {
+      "name": "Actor",
+      "capabilities": ["IO_STREAM"],
+      "on_start": [
+        { "op": "IO_STREAM", "mode": "out", "prompt": "== Tipo Bytes + serialización etiquetada ==" },
+
+        { "op": "DEF_VAR", "name": "msg", "value": "Hola Stardust 👋" },
+        { "op": "DEF_VAR", "name": "b", "value": { "to_bytes": { "var": "msg" } } },
+        { "op": "DEF_VAR", "name": "n", "value": { "len": { "var": "b" } } },
+        { "op": "DEF_VAR", "name": "b64", "value": { "base64": { "var": "b" } } },
+        { "op": "DEF_VAR", "name": "back", "value": { "from_bytes": { "var": "b" } } },
+        { "op": "HASH", "value": { "var": "b" }, "into": "h" },
+        { "op": "IO_STREAM", "mode": "out", "prompt": "texto -> bytes (long.): ", "value": { "var": "n" } },
+        { "op": "IO_STREAM", "mode": "out", "prompt": "base64                : ", "value": { "var": "b64" } },
+        { "op": "IO_STREAM", "mode": "out", "prompt": "bytes -> texto        : ", "value": { "var": "back" } },
+        { "op": "IO_STREAM", "mode": "out", "prompt": "SHA-256 (bytes)       : ", "value": { "var": "h" } },
+
+        { "op": "IO_STREAM", "mode": "out", "prompt": "-- round-trip etiquetado (Date + Bytes en un record) --" },
+        { "op": "DEF_VAR", "name": "fecha", "value": { "lit": "2026-07-20", "as": "date" } },
+        { "op": "DEF_VAR", "name": "rec", "value": { "record": { "cuando": { "var": "fecha" }, "blob": { "var": "b" } } } },
+        { "op": "SERIALIZE", "value": { "var": "rec" }, "into": "json" },
+        { "op": "IO_STREAM", "mode": "out", "prompt": "JSON etiquetado       : ", "value": { "var": "json" } },
+        { "op": "DESERIALIZE", "value": { "var": "json" }, "into": "rec2" },
+        { "op": "DEF_VAR", "name": "fecha2", "value": { "field": "cuando", "from": { "var": "rec2" } } },
+        { "op": "DEF_VAR", "name": "blob2", "value": { "field": "blob", "from": { "var": "rec2" } } },
+        { "op": "COMPARE", "target": "fecha_ok", "operator": "==", "left": { "var": "fecha" }, "right": { "var": "fecha2" } },
+        { "op": "COMPARE", "target": "blob_ok", "operator": "==", "left": { "var": "b" }, "right": { "var": "blob2" } },
+        { "op": "IO_STREAM", "mode": "out", "prompt": "Date preservó su tipo : ", "value": { "var": "fecha_ok" } },
+        { "op": "IO_STREAM", "mode": "out", "prompt": "Bytes preservó su tipo: ", "value": { "var": "blob_ok" } }
+      ]
+    }
+  ]
+}

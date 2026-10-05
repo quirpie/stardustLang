@@ -1,0 +1,32 @@
+{
+  "program": "remoto-ui",
+  "entry": "Cliente",
+  "net_allow": ["actor://127.0.0.1:9945/"],
+  "actors": [
+    {
+      "name": "Cliente",
+      "capabilities": ["NET"],
+      "on_message": {
+        "bind": "m",
+        "body": [
+          { "op": "COMPARE", "target": "es_pedir", "operator": "==", "left": { "field": "kind", "from": { "var": "m" } }, "right": "pedir" },
+          { "op": "IF_COND", "cond": { "var": "es_pedir" }, "then": [
+            { "op": "DEF_VAR", "name": "estado", "value": "llamando al nodo remoto…" },
+            { "op": "DEF_VAR", "name": "saludo", "value": "" },
+            { "op": "SEND", "to": "actor://127.0.0.1:9945/Saludador", "value": { "record": { "nombre": { "field": "nombre", "from": { "var": "m" } } } } }
+          ] },
+          { "op": "COMPARE", "target": "es_saludo", "operator": "==", "left": { "field": "kind", "from": { "var": "m" } }, "right": "saludo" },
+          { "op": "IF_COND", "cond": { "var": "es_saludo" }, "then": [
+            { "op": "DEF_VAR", "name": "estado", "value": "listo" },
+            { "op": "DEF_VAR", "name": "saludo", "value": { "field": "texto", "from": { "var": "m" } } }
+          ] },
+          { "op": "COMPARE", "target": "es_error", "operator": "==", "left": { "field": "kind", "from": { "var": "m" } }, "right": "remote_error" },
+          { "op": "IF_COND", "cond": { "var": "es_error" }, "then": [
+            { "op": "DEF_VAR", "name": "estado", "value": "error" },
+            { "op": "DEF_VAR", "name": "saludo", "value": { "field": "error", "from": { "var": "m" } } }
+          ] }
+        ]
+      }
+    }
+  ]
+}

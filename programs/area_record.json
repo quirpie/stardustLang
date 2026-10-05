@@ -1,0 +1,41 @@
+{
+  "program": "area-triangulo-record",
+  "entry": "Actor_IO",
+  "actors": [
+    {
+      "name": "Actor_IO",
+      "capabilities": ["IO_STREAM"],
+      "on_start": [
+        { "op": "IO_STREAM", "mode": "out", "prompt": "== Área de triángulo (contrato por record) ==" },
+        { "op": "IO_STREAM", "mode": "in", "target": "base", "prompt": "Base: " },
+        { "op": "IO_STREAM", "mode": "in", "target": "altura", "prompt": "Altura: " },
+        {
+          "op": "SEND",
+          "to": "Actor_Calculo",
+          "value": { "record": { "base": { "var": "base" }, "altura": { "var": "altura" } } }
+        }
+      ],
+      "on_message": {
+        "bind": "resp",
+        "body": [
+          { "op": "IO_STREAM", "mode": "out", "prompt": "Área = ", "value": { "field": "area", "from": { "var": "resp" } } }
+        ]
+      }
+    },
+    {
+      "name": "Actor_Calculo",
+      "capabilities": [],
+      "on_message": {
+        "bind": "p",
+        "expects": { "base": "int", "altura": "int" },
+        "body": [
+          { "op": "DEF_VAR", "name": "b", "value": { "field": "base", "from": { "var": "p" } } },
+          { "op": "DEF_VAR", "name": "h", "value": { "field": "altura", "from": { "var": "p" } } },
+          { "op": "MATH", "target": "prod", "operator": "*", "left": { "var": "b" }, "right": { "var": "h" } },
+          { "op": "MATH", "target": "area", "operator": "/", "left": { "var": "prod" }, "right": 2 },
+          { "op": "SEND", "to": "Actor_IO", "value": { "record": { "area": { "var": "area" } } } }
+        ]
+      }
+    }
+  ]
+}

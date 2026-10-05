@@ -1,0 +1,15 @@
+app tareas
+
+actor UI:
+  start:
+    tareas = []
+  on m:
+    tareas.append(m)
+  view:
+    column:
+      label(f'Tareas: {len(tareas)}')
+      input('Añadir', placeholder='Nueva tarea')
+      for t in tareas:
+        label(t)
+      else:
+        label('Nada pendiente')

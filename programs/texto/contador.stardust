@@ -1,0 +1,17 @@
+app contador-persistente
+
+actor IO:
+  start:
+    print('== Contador persistente (Actor de Estado) ==')
+    send(Store, 'tick')
+  on n:
+    print('Ejecuciones registradas: ', n)
+
+actor Store:
+  on cmd:
+    count = 0
+    if exists('contador.txt'):
+      count = read('contador.txt')
+    count = count + 1
+    write('contador.txt', count)
+    send(IO, count)

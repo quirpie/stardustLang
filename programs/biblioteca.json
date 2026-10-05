@@ -1,0 +1,27 @@
+{
+  "program": "biblioteca",
+  "entry": "Biblioteca",
+  "actors": [
+    {
+      "name": "Biblioteca",
+      "capabilities": ["FILE"],
+      "on_start": [
+        { "op": "FILE_LIST", "into": "programas" }
+      ],
+      "on_message": {
+        "bind": "m",
+        "body": [
+          { "op": "COMPARE", "target": "es_guardar", "operator": "==", "left": { "field": "cmd", "from": { "var": "m" } }, "right": "guardar" },
+          { "op": "IF_COND", "cond": { "var": "es_guardar" }, "then": [
+            { "op": "FILE_WRITE", "path": { "field": "nombre", "from": { "var": "m" } }, "value": { "field": "fuente", "from": { "var": "m" } } }
+          ] },
+          { "op": "COMPARE", "target": "es_borrar", "operator": "==", "left": { "field": "cmd", "from": { "var": "m" } }, "right": "borrar" },
+          { "op": "IF_COND", "cond": { "var": "es_borrar" }, "then": [
+            { "op": "FILE_DELETE", "path": { "field": "nombre", "from": { "var": "m" } } }
+          ] },
+          { "op": "FILE_LIST", "into": "programas" }
+        ]
+      }
+    }
+  ]
+}

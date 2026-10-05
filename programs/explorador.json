@@ -1,0 +1,66 @@
+{
+  "program": "explorador-de-archivos",
+  "entry": "Sistema",
+  "actors": [
+    {
+      "name": "Sistema",
+      "capabilities": ["FILE", "RENDER"],
+      "on_start": [
+        { "op": "DEF_VAR", "name": "seleccionado", "value": "" },
+        { "op": "DEF_VAR", "name": "preview" },
+        { "op": "FILE_LIST", "into": "archivos" },
+        { "op": "MATH", "target": "resumen", "operator": "+", "left": "Archivos: ", "right": { "len": { "var": "archivos" } } }
+      ],
+      "on_message": {
+        "bind": "m",
+        "body": [
+          { "op": "COMPARE", "target": "es_guardar", "operator": "==", "left": { "field": "cmd", "from": { "var": "m" } }, "right": "guardar" },
+          { "op": "IF_COND", "cond": { "var": "es_guardar" }, "then": [
+            { "op": "FILE_WRITE", "path": { "field": "nombre", "from": { "var": "m" } }, "value": { "field": "datos", "from": { "var": "m" } } }
+          ] },
+
+          { "op": "COMPARE", "target": "es_ver", "operator": "==", "left": { "field": "cmd", "from": { "var": "m" } }, "right": "ver" },
+          { "op": "IF_COND", "cond": { "var": "es_ver" }, "then": [
+            { "op": "ASSIGN", "target": "seleccionado", "value": { "field": "nombre", "from": { "var": "m" } } },
+            { "op": "FILE_READ", "path": { "var": "seleccionado" }, "into": "preview", "as": "bytes" }
+          ] },
+
+          { "op": "COMPARE", "target": "es_borrar", "operator": "==", "left": { "field": "cmd", "from": { "var": "m" } }, "right": "borrar" },
+          { "op": "IF_COND", "cond": { "var": "es_borrar" }, "then": [
+            { "op": "FILE_DELETE", "path": { "field": "nombre", "from": { "var": "m" } } },
+            { "op": "ASSIGN", "target": "seleccionado", "value": "" },
+            { "op": "DEF_VAR", "name": "preview" }
+          ] },
+
+          { "op": "FILE_LIST", "into": "archivos" },
+          { "op": "MATH", "target": "resumen", "operator": "+", "left": "Archivos: ", "right": { "len": { "var": "archivos" } } }
+        ]
+      },
+      "view": {
+        "type": "column",
+        "children": [
+          { "type": "label", "text": { "var": "resumen" } },
+
+          { "type": "filedrop", "label": "Arrastra archivos aquí o elige",
+            "drop": { "record": { "cmd": "guardar", "nombre": { "var": "$name" }, "datos": { "var": "$bytes" } } } },
+
+          { "type": "input", "placeholder": "crear nota.txt y pulsar Enter",
+            "submit": { "record": { "cmd": "guardar", "nombre": { "var": "$input" }, "datos": { "to_bytes": "nota nueva\n" } } } },
+
+          { "type": "list", "bind": { "var": "archivos" }, "as": "archivo",
+            "empty": { "type": "label", "text": "(volumen vacío)" },
+            "item": { "type": "button", "label": { "var": "archivo" },
+              "send": { "record": { "cmd": "ver", "nombre": { "var": "archivo" } } } } },
+
+          { "type": "row", "children": [
+            { "type": "label", "text": { "var": "seleccionado" } },
+            { "type": "button", "label": "borrar",
+              "send": { "record": { "cmd": "borrar", "nombre": { "var": "seleccionado" } } } }
+          ] },
+
+          { "type": "image", "src": { "var": "preview" }, "alt": { "var": "seleccionado" } }
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,38 @@
+{
+  "program": "contador-persistente",
+  "entry": "Actor_IO",
+  "actors": [
+    {
+      "name": "Actor_IO",
+      "capabilities": ["IO_STREAM"],
+      "on_start": [
+        { "op": "IO_STREAM", "mode": "out", "prompt": "== Contador persistente (Actor de Estado) ==" },
+        { "op": "SEND", "to": "Actor_Store", "value": "tick" }
+      ],
+      "on_message": {
+        "bind": "n",
+        "body": [
+          { "op": "IO_STREAM", "mode": "out", "prompt": "Ejecuciones registradas: ", "value": { "var": "n" } }
+        ]
+      }
+    },
+    {
+      "name": "Actor_Store",
+      "capabilities": ["FILE"],
+      "on_message": {
+        "bind": "cmd",
+        "body": [
+          { "op": "DEF_VAR", "name": "count", "value": 0 },
+          { "op": "FILE_EXISTS", "path": "contador.txt", "into": "existe" },
+          {
+            "op": "IF_COND", "cond": { "var": "existe" },
+            "then": [ { "op": "FILE_READ", "path": "contador.txt", "into": "count" } ]
+          },
+          { "op": "MATH", "target": "count", "operator": "+", "left": { "var": "count" }, "right": 1 },
+          { "op": "FILE_WRITE", "path": "contador.txt", "value": { "var": "count" } },
+          { "op": "SEND", "to": "Actor_IO", "value": { "var": "count" } }
+        ]
+      }
+    }
+  ]
+}

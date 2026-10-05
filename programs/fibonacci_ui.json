@@ -1,0 +1,86 @@
+{
+  "program": "fibonacci-ui",
+  "entry": "Actor_UI",
+  "actors": [
+    {
+      "name": "Actor_UI",
+      "capabilities": ["RENDER"],
+      "on_start": [ { "op": "DEF_VAR", "name": "display", "value": "n = 1" } ],
+      "on_message": {
+        "bind": "value",
+        "body": [ { "op": "ASSIGN", "target": "display", "value": { "var": "value" } } ]
+      },
+      "view": {
+        "type": "column",
+        "children": [
+          { "type": "label", "text": { "var": "display" } },
+          {
+            "type": "grid", "columns": 3,
+            "children": [
+              { "type": "button", "label": "−1", "send": "-", "to": "Actor_Fib" },
+              { "type": "button", "label": "+1", "send": "+", "to": "Actor_Fib" },
+              { "type": "button", "label": "Fibonacci", "send": "fib", "to": "Actor_Fib" }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "Actor_Fib",
+      "capabilities": [],
+      "on_start": [ { "op": "DEF_VAR", "name": "n", "value": 1 } ],
+      "on_message": {
+        "bind": "tok",
+        "body": [
+          { "op": "COMPARE", "target": "is_inc", "operator": "==", "left": { "var": "tok" }, "right": "+" },
+          { "op": "COMPARE", "target": "is_dec", "operator": "==", "left": { "var": "tok" }, "right": "-" },
+          { "op": "COMPARE", "target": "is_fib", "operator": "==", "left": { "var": "tok" }, "right": "fib" },
+          { "op": "DEF_VAR", "name": "out", "value": "" },
+
+          { "op": "IF_COND", "cond": { "var": "is_inc" }, "then": [
+              { "op": "MATH", "target": "n", "operator": "+", "left": { "var": "n" }, "right": 1 }
+          ] },
+          { "op": "IF_COND", "cond": { "var": "is_dec" }, "then": [
+              { "op": "COMPARE", "target": "gt1", "operator": ">", "left": { "var": "n" }, "right": 1 },
+              { "op": "IF_COND", "cond": { "var": "gt1" }, "then": [
+                  { "op": "MATH", "target": "n", "operator": "-", "left": { "var": "n" }, "right": 1 }
+              ] }
+          ] },
+
+          {
+            "op": "IF_COND", "cond": { "var": "is_fib" },
+            "then": [
+              { "op": "DEF_VAR", "name": "a", "value": 0 },
+              { "op": "DEF_VAR", "name": "b", "value": 1 },
+              { "op": "DEF_VAR", "name": "i", "value": 0 },
+              { "op": "DEF_VAR", "name": "series", "value": "" },
+              { "op": "DEF_VAR", "name": "cont", "value": false },
+              { "op": "COMPARE", "target": "cont", "operator": "<", "left": { "var": "i" }, "right": { "var": "n" } },
+              { "op": "LOOP", "cond": { "var": "cont" }, "body": [
+                  { "op": "COMPARE", "target": "notfirst", "operator": ">", "left": { "var": "i" }, "right": 0 },
+                  { "op": "IF_COND", "cond": { "var": "notfirst" }, "then": [
+                      { "op": "MATH", "target": "series", "operator": "+", "left": { "var": "series" }, "right": ", " }
+                  ] },
+                  { "op": "MATH", "target": "series", "operator": "+", "left": { "var": "series" }, "right": { "var": "a" } },
+                  { "op": "MATH", "target": "c", "operator": "+", "left": { "var": "a" }, "right": { "var": "b" } },
+                  { "op": "ASSIGN", "target": "a", "value": { "var": "b" } },
+                  { "op": "ASSIGN", "target": "b", "value": { "var": "c" } },
+                  { "op": "MATH", "target": "i", "operator": "+", "left": { "var": "i" }, "right": 1 },
+                  { "op": "COMPARE", "target": "cont", "operator": "<", "left": { "var": "i" }, "right": { "var": "n" } }
+              ] },
+              { "op": "DEF_VAR", "name": "pre", "value": "fib(" },
+              { "op": "MATH", "target": "pre", "operator": "+", "left": { "var": "pre" }, "right": { "var": "n" } },
+              { "op": "MATH", "target": "pre", "operator": "+", "left": { "var": "pre" }, "right": "): " },
+              { "op": "MATH", "target": "out", "operator": "+", "left": { "var": "pre" }, "right": { "var": "series" } }
+            ],
+            "else": [
+              { "op": "DEF_VAR", "name": "lbl", "value": "n = " },
+              { "op": "MATH", "target": "out", "operator": "+", "left": { "var": "lbl" }, "right": { "var": "n" } }
+            ]
+          },
+          { "op": "SEND", "to": "Actor_UI", "value": { "var": "out" } }
+        ]
+      }
+    }
+  ]
+}

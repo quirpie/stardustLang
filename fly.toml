@@ -1,0 +1,43 @@
+# Fly.io: stardust-server (ver docs/deploy-fly.md).
+app = "stardust-playground"
+primary_region = "dfw"      # Dallas; ver `fly platform regions`
+
+kill_signal = "SIGINT"
+kill_timeout = "10s"        # = margen de parada del contrato
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  RUST_LOG = "info"
+  # Cámbialos por los dominios reales (docs/deploy-fly.md, «Dominios»). Mientras
+  # coincidan, el servidor arranca en modo desarrollo.
+  STARDUST_PUBLIC_ORIGIN = "https://stardust-playground.fly.dev"
+  STARDUST_RUNNER_ORIGIN = "https://stardust-playground.fly.dev"
+
+[[mounts]]
+  source = "stardust_data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "stop"     # se apaga sin tráfico…
+  auto_start_machines = true      # …y el proxy la arranca con la primera petición
+  min_machines_running = 0
+
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 200
+    hard_limit = 250
+
+  [[http_service.checks]]
+    grace_period = "10s"
+    interval = "30s"
+    method = "GET"
+    path = "/healthz"
+    timeout = "5s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"

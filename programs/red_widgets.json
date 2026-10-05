@@ -1,0 +1,56 @@
+{
+  "program": "cliente-red",
+  "entry": "Cliente",
+  "net_allow": ["https://httpbin.org/", "https://api.github.com/"],
+  "actors": [
+    {
+      "name": "Cliente",
+      "capabilities": ["NET", "RENDER"],
+      "on_start": [
+        { "op": "DEF_VAR", "name": "estado", "value": "listo — pulsa un botón" },
+        { "op": "DEF_VAR", "name": "status", "value": "" },
+        { "op": "DEF_VAR", "name": "cuerpo", "value": "" }
+      ],
+      "on_message": {
+        "bind": "m",
+        "body": [
+          { "op": "COMPARE", "target": "es_pedir", "operator": "==", "left": { "field": "kind", "from": { "var": "m" } }, "right": "pedir" },
+          { "op": "IF_COND", "cond": { "var": "es_pedir" }, "then": [
+            { "op": "ASSIGN", "target": "estado", "value": "cargando…" },
+            { "op": "ASSIGN", "target": "cuerpo", "value": "" },
+            { "op": "NET_FETCH", "method": "GET", "url": { "field": "url", "from": { "var": "m" } } }
+          ] },
+
+          { "op": "COMPARE", "target": "es_resp", "operator": "==", "left": { "field": "kind", "from": { "var": "m" } }, "right": "net_response" },
+          { "op": "IF_COND", "cond": { "var": "es_resp" }, "then": [
+            { "op": "ASSIGN", "target": "status", "value": { "field": "status", "from": { "var": "m" } } },
+            { "op": "IF_COND", "cond": { "field": "ok", "from": { "var": "m" } },
+              "then": [
+                { "op": "ASSIGN", "target": "estado", "value": "listo ✓" },
+                { "op": "ASSIGN", "target": "cuerpo", "value": { "from_bytes": { "field": "body", "from": { "var": "m" } } } }
+              ],
+              "else": [
+                { "op": "ASSIGN", "target": "estado", "value": "error" },
+                { "op": "ASSIGN", "target": "cuerpo", "value": { "field": "error", "from": { "var": "m" } } }
+              ]
+            }
+          ] }
+        ]
+      },
+      "view": {
+        "type": "column",
+        "children": [
+          { "type": "label", "text": { "var": "estado" } },
+          { "type": "row", "children": [
+            { "type": "button", "label": "GET httpbin.org/get",
+              "send": { "record": { "kind": "pedir", "url": "https://httpbin.org/get" } } },
+            { "type": "button", "label": "GET github zen",
+              "send": { "record": { "kind": "pedir", "url": "https://api.github.com/zen" } } }
+          ] },
+          { "type": "label", "text": { "var": "status" } },
+          { "type": "image", "src": { "to_bytes": { "var": "cuerpo" } }, "alt": "respuesta HTTP" }
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,903 @@
+{
+  "program": "editor-markdown",
+  "entry": "Editor",
+  "actors": [
+    {
+      "name": "Editor",
+      "capabilities": [
+        "FILE",
+        "RENDER"
+      ],
+      "procedures": {
+        "escape": {
+          "params": [
+            "t"
+          ],
+          "returns": "r",
+          "body": [
+            {
+              "op": "DEF_VAR",
+              "name": "r",
+              "value": {
+                "replace": {
+                  "var": "t"
+                },
+                "find": "&",
+                "with": "&amp;"
+              }
+            },
+            {
+              "op": "ASSIGN",
+              "target": "r",
+              "value": {
+                "replace": {
+                  "var": "r"
+                },
+                "find": "<",
+                "with": "&lt;"
+              }
+            },
+            {
+              "op": "ASSIGN",
+              "target": "r",
+              "value": {
+                "replace": {
+                  "var": "r"
+                },
+                "find": ">",
+                "with": "&gt;"
+              }
+            }
+          ]
+        },
+        "wrap_pairs": {
+          "params": [
+            "t",
+            "marker",
+            "open",
+            "close"
+          ],
+          "returns": "out",
+          "body": [
+            {
+              "op": "DEF_VAR",
+              "name": "parts",
+              "value": {
+                "split": {
+                  "var": "t"
+                },
+                "on": {
+                  "var": "marker"
+                }
+              }
+            },
+            {
+              "op": "DEF_VAR",
+              "name": "out",
+              "value": ""
+            },
+            {
+              "op": "DEF_VAR",
+              "name": "i",
+              "value": 0
+            },
+            {
+              "op": "DEF_VAR",
+              "name": "n",
+              "value": {
+                "len": {
+                  "var": "parts"
+                }
+              }
+            },
+            {
+              "op": "COMPARE",
+              "target": "sigue",
+              "operator": "<",
+              "left": {
+                "var": "i"
+              },
+              "right": {
+                "var": "n"
+              }
+            },
+            {
+              "op": "LOOP",
+              "cond": {
+                "var": "sigue"
+              },
+              "body": [
+                {
+                  "op": "DEF_VAR",
+                  "name": "part",
+                  "value": {
+                    "at": {
+                      "var": "i"
+                    },
+                    "of": {
+                      "var": "parts"
+                    }
+                  }
+                },
+                {
+                  "op": "MATH",
+                  "target": "resto",
+                  "operator": "%",
+                  "left": {
+                    "var": "i"
+                  },
+                  "right": 2
+                },
+                {
+                  "op": "COMPARE",
+                  "target": "impar",
+                  "operator": "==",
+                  "left": {
+                    "var": "resto"
+                  },
+                  "right": 1
+                },
+                {
+                  "op": "IF_COND",
+                  "cond": {
+                    "var": "impar"
+                  },
+                  "then": [
+                    {
+                      "op": "DEF_VAR",
+                      "name": "seg",
+                      "value": {
+                        "var": "open"
+                      }
+                    },
+                    {
+                      "op": "MATH",
+                      "target": "seg",
+                      "operator": "+",
+                      "left": {
+                        "var": "seg"
+                      },
+                      "right": {
+                        "var": "part"
+                      }
+                    },
+                    {
+                      "op": "MATH",
+                      "target": "seg",
+                      "operator": "+",
+                      "left": {
+                        "var": "seg"
+                      },
+                      "right": {
+                        "var": "close"
+                      }
+                    },
+                    {
+                      "op": "MATH",
+                      "target": "out",
+                      "operator": "+",
+                      "left": {
+                        "var": "out"
+                      },
+                      "right": {
+                        "var": "seg"
+                      }
+                    }
+                  ],
+                  "else": [
+                    {
+                      "op": "MATH",
+                      "target": "out",
+                      "operator": "+",
+                      "left": {
+                        "var": "out"
+                      },
+                      "right": {
+                        "var": "part"
+                      }
+                    }
+                  ]
+                },
+                {
+                  "op": "MATH",
+                  "target": "i",
+                  "operator": "+",
+                  "left": {
+                    "var": "i"
+                  },
+                  "right": 1
+                },
+                {
+                  "op": "COMPARE",
+                  "target": "sigue",
+                  "operator": "<",
+                  "left": {
+                    "var": "i"
+                  },
+                  "right": {
+                    "var": "n"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        "inline": {
+          "params": [
+            "t"
+          ],
+          "returns": "r",
+          "body": [
+            {
+              "op": "CALL",
+              "proc": "wrap_pairs",
+              "args": [
+                {
+                  "var": "t"
+                },
+                "**",
+                "<strong>",
+                "</strong>"
+              ],
+              "into": "r"
+            },
+            {
+              "op": "CALL",
+              "proc": "wrap_pairs",
+              "args": [
+                {
+                  "var": "r"
+                },
+                "`",
+                "<code>",
+                "</code>"
+              ],
+              "into": "r"
+            }
+          ]
+        },
+        "render_md": {
+          "params": [
+            "texto"
+          ],
+          "returns": "html",
+          "body": [
+            {
+              "op": "CALL",
+              "proc": "escape",
+              "args": [
+                {
+                  "var": "texto"
+                }
+              ],
+              "into": "esc"
+            },
+            {
+              "op": "DEF_VAR",
+              "name": "lineas",
+              "value": {
+                "split": {
+                  "var": "esc"
+                },
+                "on": "\n"
+              }
+            },
+            {
+              "op": "DEF_VAR",
+              "name": "html",
+              "value": ""
+            },
+            {
+              "op": "FOREACH",
+              "in": {
+                "var": "lineas"
+              },
+              "var": "linea",
+              "body": [
+                {
+                  "op": "DEF_VAR",
+                  "name": "l",
+                  "value": {
+                    "var": "linea"
+                  }
+                },
+                {
+                  "op": "DEF_VAR",
+                  "name": "bloque",
+                  "value": ""
+                },
+                {
+                  "op": "IF_COND",
+                  "cond": {
+                    "starts_with": {
+                      "var": "l"
+                    },
+                    "prefix": "### "
+                  },
+                  "then": [
+                    {
+                      "op": "CALL",
+                      "proc": "inline",
+                      "args": [
+                        {
+                          "slice": {
+                            "var": "l"
+                          },
+                          "from": 4
+                        }
+                      ],
+                      "into": "c"
+                    },
+                    {
+                      "op": "DEF_VAR",
+                      "name": "bloque",
+                      "value": "<h3>"
+                    },
+                    {
+                      "op": "MATH",
+                      "target": "bloque",
+                      "operator": "+",
+                      "left": {
+                        "var": "bloque"
+                      },
+                      "right": {
+                        "var": "c"
+                      }
+                    },
+                    {
+                      "op": "MATH",
+                      "target": "bloque",
+                      "operator": "+",
+                      "left": {
+                        "var": "bloque"
+                      },
+                      "right": "</h3>"
+                    }
+                  ],
+                  "else": [
+                    {
+                      "op": "IF_COND",
+                      "cond": {
+                        "starts_with": {
+                          "var": "l"
+                        },
+                        "prefix": "## "
+                      },
+                      "then": [
+                        {
+                          "op": "CALL",
+                          "proc": "inline",
+                          "args": [
+                            {
+                              "slice": {
+                                "var": "l"
+                              },
+                              "from": 3
+                            }
+                          ],
+                          "into": "c"
+                        },
+                        {
+                          "op": "DEF_VAR",
+                          "name": "bloque",
+                          "value": "<h2>"
+                        },
+                        {
+                          "op": "MATH",
+                          "target": "bloque",
+                          "operator": "+",
+                          "left": {
+                            "var": "bloque"
+                          },
+                          "right": {
+                            "var": "c"
+                          }
+                        },
+                        {
+                          "op": "MATH",
+                          "target": "bloque",
+                          "operator": "+",
+                          "left": {
+                            "var": "bloque"
+                          },
+                          "right": "</h2>"
+                        }
+                      ],
+                      "else": [
+                        {
+                          "op": "IF_COND",
+                          "cond": {
+                            "starts_with": {
+                              "var": "l"
+                            },
+                            "prefix": "# "
+                          },
+                          "then": [
+                            {
+                              "op": "CALL",
+                              "proc": "inline",
+                              "args": [
+                                {
+                                  "slice": {
+                                    "var": "l"
+                                  },
+                                  "from": 2
+                                }
+                              ],
+                              "into": "c"
+                            },
+                            {
+                              "op": "DEF_VAR",
+                              "name": "bloque",
+                              "value": "<h1>"
+                            },
+                            {
+                              "op": "MATH",
+                              "target": "bloque",
+                              "operator": "+",
+                              "left": {
+                                "var": "bloque"
+                              },
+                              "right": {
+                                "var": "c"
+                              }
+                            },
+                            {
+                              "op": "MATH",
+                              "target": "bloque",
+                              "operator": "+",
+                              "left": {
+                                "var": "bloque"
+                              },
+                              "right": "</h1>"
+                            }
+                          ],
+                          "else": [
+                            {
+                              "op": "IF_COND",
+                              "cond": {
+                                "starts_with": {
+                                  "var": "l"
+                                },
+                                "prefix": "- "
+                              },
+                              "then": [
+                                {
+                                  "op": "CALL",
+                                  "proc": "inline",
+                                  "args": [
+                                    {
+                                      "slice": {
+                                        "var": "l"
+                                      },
+                                      "from": 2
+                                    }
+                                  ],
+                                  "into": "c"
+                                },
+                                {
+                                  "op": "DEF_VAR",
+                                  "name": "bloque",
+                                  "value": "<li>"
+                                },
+                                {
+                                  "op": "MATH",
+                                  "target": "bloque",
+                                  "operator": "+",
+                                  "left": {
+                                    "var": "bloque"
+                                  },
+                                  "right": {
+                                    "var": "c"
+                                  }
+                                },
+                                {
+                                  "op": "MATH",
+                                  "target": "bloque",
+                                  "operator": "+",
+                                  "left": {
+                                    "var": "bloque"
+                                  },
+                                  "right": "</li>"
+                                }
+                              ],
+                              "else": [
+                                {
+                                  "op": "COMPARE",
+                                  "target": "vacia",
+                                  "operator": "==",
+                                  "left": {
+                                    "trim": {
+                                      "var": "l"
+                                    }
+                                  },
+                                  "right": ""
+                                },
+                                {
+                                  "op": "IF_COND",
+                                  "cond": {
+                                    "var": "vacia"
+                                  },
+                                  "then": [
+                                    {
+                                      "op": "DEF_VAR",
+                                      "name": "bloque",
+                                      "value": ""
+                                    }
+                                  ],
+                                  "else": [
+                                    {
+                                      "op": "CALL",
+                                      "proc": "inline",
+                                      "args": [
+                                        {
+                                          "var": "l"
+                                        }
+                                      ],
+                                      "into": "c"
+                                    },
+                                    {
+                                      "op": "DEF_VAR",
+                                      "name": "bloque",
+                                      "value": "<p>"
+                                    },
+                                    {
+                                      "op": "MATH",
+                                      "target": "bloque",
+                                      "operator": "+",
+                                      "left": {
+                                        "var": "bloque"
+                                      },
+                                      "right": {
+                                        "var": "c"
+                                      }
+                                    },
+                                    {
+                                      "op": "MATH",
+                                      "target": "bloque",
+                                      "operator": "+",
+                                      "left": {
+                                        "var": "bloque"
+                                      },
+                                      "right": "</p>"
+                                    }
+                                  ]
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "op": "MATH",
+                  "target": "html",
+                  "operator": "+",
+                  "left": {
+                    "var": "html"
+                  },
+                  "right": {
+                    "var": "bloque"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      },
+      "on_start": [
+        {
+          "op": "DEF_VAR",
+          "name": "nombre",
+          "value": "bienvenida.md"
+        },
+        {
+          "op": "DEF_VAR",
+          "name": "fuente",
+          "value": "# Bienvenido\n\nEscribe **Markdown** y pulsa Guardar.\n\n## Soporta\n\n- encabezados\n- listas\n- `código` en línea y **negritas**\n"
+        },
+        {
+          "op": "CALL",
+          "proc": "render_md",
+          "args": [
+            {
+              "var": "fuente"
+            }
+          ],
+          "into": "html"
+        },
+        {
+          "op": "FILE_LIST",
+          "into": "archivos"
+        }
+      ],
+      "on_message": {
+        "bind": "m",
+        "body": [
+          {
+            "op": "COMPARE",
+            "target": "es_crear",
+            "operator": "==",
+            "left": {
+              "field": "cmd",
+              "from": {
+                "var": "m"
+              }
+            },
+            "right": "crear"
+          },
+          {
+            "op": "IF_COND",
+            "cond": {
+              "var": "es_crear"
+            },
+            "then": [
+              {
+                "op": "ASSIGN",
+                "target": "nombre",
+                "value": {
+                  "field": "nombre",
+                  "from": {
+                    "var": "m"
+                  }
+                }
+              },
+              {
+                "op": "DEF_VAR",
+                "name": "fuente",
+                "value": ""
+              },
+              {
+                "op": "CALL",
+                "proc": "render_md",
+                "args": [
+                  {
+                    "var": "fuente"
+                  }
+                ],
+                "into": "html"
+              },
+              {
+                "op": "FILE_WRITE",
+                "path": {
+                  "var": "nombre"
+                },
+                "value": {
+                  "var": "fuente"
+                }
+              },
+              {
+                "op": "FILE_LIST",
+                "into": "archivos"
+              }
+            ]
+          },
+          {
+            "op": "COMPARE",
+            "target": "es_guardar",
+            "operator": "==",
+            "left": {
+              "field": "cmd",
+              "from": {
+                "var": "m"
+              }
+            },
+            "right": "guardar"
+          },
+          {
+            "op": "IF_COND",
+            "cond": {
+              "var": "es_guardar"
+            },
+            "then": [
+              {
+                "op": "ASSIGN",
+                "target": "fuente",
+                "value": {
+                  "field": "texto",
+                  "from": {
+                    "var": "m"
+                  }
+                }
+              },
+              {
+                "op": "CALL",
+                "proc": "render_md",
+                "args": [
+                  {
+                    "var": "fuente"
+                  }
+                ],
+                "into": "html"
+              },
+              {
+                "op": "FILE_WRITE",
+                "path": {
+                  "var": "nombre"
+                },
+                "value": {
+                  "var": "fuente"
+                }
+              },
+              {
+                "op": "FILE_LIST",
+                "into": "archivos"
+              }
+            ]
+          },
+          {
+            "op": "COMPARE",
+            "target": "es_cargar",
+            "operator": "==",
+            "left": {
+              "field": "cmd",
+              "from": {
+                "var": "m"
+              }
+            },
+            "right": "cargar"
+          },
+          {
+            "op": "IF_COND",
+            "cond": {
+              "var": "es_cargar"
+            },
+            "then": [
+              {
+                "op": "ASSIGN",
+                "target": "nombre",
+                "value": {
+                  "field": "nombre",
+                  "from": {
+                    "var": "m"
+                  }
+                }
+              },
+              {
+                "op": "FILE_READ",
+                "path": {
+                  "var": "nombre"
+                },
+                "into": "fuente"
+              },
+              {
+                "op": "CALL",
+                "proc": "render_md",
+                "args": [
+                  {
+                    "var": "fuente"
+                  }
+                ],
+                "into": "html"
+              }
+            ]
+          },
+          {
+            "op": "COMPARE",
+            "target": "es_borrar",
+            "operator": "==",
+            "left": {
+              "field": "cmd",
+              "from": {
+                "var": "m"
+              }
+            },
+            "right": "borrar"
+          },
+          {
+            "op": "IF_COND",
+            "cond": {
+              "var": "es_borrar"
+            },
+            "then": [
+              {
+                "op": "FILE_DELETE",
+                "path": {
+                  "field": "nombre",
+                  "from": {
+                    "var": "m"
+                  }
+                }
+              },
+              {
+                "op": "FILE_LIST",
+                "into": "archivos"
+              }
+            ]
+          }
+        ]
+      },
+      "view": {
+        "type": "column",
+        "children": [
+          {
+            "type": "row",
+            "children": [
+              {
+                "type": "input",
+                "src": {
+                  "var": "nombre"
+                },
+                "placeholder": "nombre.md",
+                "submit": {
+                  "record": {
+                    "cmd": "crear",
+                    "nombre": {
+                      "var": "$input"
+                    }
+                  }
+                },
+                "label": "crear archivo"
+              },
+              {
+                "type": "button",
+                "label": "borrar",
+                "send": {
+                  "record": {
+                    "cmd": "borrar",
+                    "nombre": {
+                      "var": "nombre"
+                    }
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "type": "label",
+            "text": "Escribe un nombre y pulsa «crear archivo» (o Enter) para empezar una nota nueva en blanco. Edita abajo y pulsa Guardar. Pulsa una nota de la lista para abrirla."
+          },
+          {
+            "type": "list",
+            "bind": {
+              "var": "archivos"
+            },
+            "as": "f",
+            "empty": {
+              "type": "label",
+              "text": "(aun no hay notas guardadas)"
+            },
+            "item": {
+              "type": "button",
+              "label": {
+                "var": "f"
+              },
+              "send": {
+                "record": {
+                  "cmd": "cargar",
+                  "nombre": {
+                    "var": "f"
+                  }
+                }
+              }
+            }
+          },
+          {
+            "type": "textarea",
+            "src": {
+              "var": "fuente"
+            },
+            "placeholder": "# Escribe Markdown...",
+            "label": "Guardar",
+            "submit": {
+              "record": {
+                "cmd": "guardar",
+                "texto": {
+                  "var": "$input"
+                }
+              }
+            }
+          },
+          {
+            "type": "html",
+            "src": {
+              "var": "html"
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

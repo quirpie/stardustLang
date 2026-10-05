@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stardust Runner</title>
+<!--
+  web/runner.template.html — Runner de StardustLang: ejecuta UN programa dentro de
+  un iframe de la app, en otro origen (STARDUST_RUNNER_ORIGIN). Aquí corre el
+  código de los programas; no hay sesión ni datos de la app. Ver docs/servidor.md,
+  «Playground y runner».
+
+  Protocolo (postMessage; solo con la ventana padre y su origen publicOrigin):
+    runner → app   {type:"ready"}                         al cargar
+    app → runner   {type:"load", key, title, ir, capabilities, trusted, theme}
+    app → runner   {type:"theme", theme}
+    app → runner   {type:"drop", key}                     borra los datos de la app
+    runner → app   {type:"trace", line} · {type:"started"} · {type:"error", message}
+                   {type:"dropped", key}
+
+  Los datos de cada programa viven SOLO en el IndexedDB de este origen
+  ("stardust-run:<owner>/<name>"), en el navegador de quien lo abre.
+
+  Marcadores que sustituye web/build-playground.sh: STARDUST_CSS, GLUE, RUNTIME, WASM.
+  El servidor sustituye además la configuración (STARDUST_CONFIG).
+-->
+<style>
+  /*__STARDUST_CSS__*/
+
+  *{ box-sizing:border-box; }
+  html, body{ min-height:100%; }
+  body{ margin:0; background:var(--panel); color:var(--ink); font-family:var(--mono); font-size:14px; line-height:1.5;
+    -webkit-font-smoothing:antialiased; }
+  button{ font:inherit; }
+  .app-root{ padding:14px; }
+  .status{ padding:24px 16px; color:var(--muted); font-family:var(--sans); text-align:center; }
+  .err{ margin:14px; color:var(--danger); white-space:pre-wrap; font-size:13px; }
+  .consent{ max-width:520px; margin:24px auto; padding:18px; border:1px solid var(--line); border-radius:var(--radius);
+    background:var(--panel-2); font-family:var(--sans); }
+  .consent h2{ margin:0 0 6px; font-size:16px; font-family:var(--mono); }
+  .consent ul{ margin:10px 0 14px; padding-left:20px; }
+  .consent li{ margin:4px 0; }
+  .consent code{ font-family:var(--mono); font-size:12.5px; overflow-wrap:anywhere; }
+  .consent .actions{ display:flex; justify-content:flex-end; }
+  .consent button{ padding:8px 14px; color:var(--accent-ink); background:var(--accent); border:0; border-radius:9px; font-weight:650; cursor:pointer; }
+  .consent button:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
+</style>
+</head>
+<body>
+<div id="root" class="app-root"><div class="status">Esperando el programa…</div></div>
+
+<script type="module">
+/*__GLUE__*/
+
+/*__RUNTIME__*/
+
+const CONFIG = /*__STARDUST_CONFIG__*/null;
+const PARENT_ORIGIN = CONFIG && CONFIG.publicOrigin;
+const root = document.getElementById("root");
+
+function post(msg){ if (PARENT_ORIGIN && window.parent !== window) window.parent.postMessage(msg, PARENT_ORIGIN); }
+const errText=(e)=>String(e && e.message ? e.message : e);
+function fail(message){
+  const d=document.createElement("div"); d.className="err"; d.textContent=message;
+  root.replaceChildren(d); post({ type:"error", message });
+}
+
+if (!PARENT_ORIGIN || window.parent === window){
+  root.innerHTML='<div class="status">El runner solo funciona dentro de la app de StardustLang.</div>';
+  throw new Error("runner sin ventana padre");
+}
+
+await __wbg_init({ module_or_path: b64ToBytes("__WASM__") });
+
+// ── Permisos ────────────────────────────────────────────────────────────────
+// Capacidades que se preguntan antes de ejecutar un programa ajeno (RENDER e
+// IO_STREAM no). El permiso se recuerda por programa y se vuelve a pedir si una
+// versión pide algo nuevo.
+const ASK = { NET:"Acceder a la red", FILE:"Guardar ficheros en este navegador", CRYPTO:"Firmar y verificar datos" };
+
+function sensitive(caps){
+  const set=new Set();
+  for (const list of Object.values((caps && caps.actors) || {})) for (const c of list) if (ASK[c]) set.add(c);
+  return { caps:[...set].sort(), net:[...((caps && caps.net_allow) || [])].sort() };
+}
+const consentKey=(key)=>"stardust-consent:"+key;
+function granted(key, need){
+  let had=null; try { had=JSON.parse(localStorage.getItem(consentKey(key))); } catch(_){}
+  if (!had) return false;
+  return need.caps.every(c=>had.caps.includes(c)) && need.net.every(u=>had.net.includes(u));
+}
+function grant(key, need){ try { localStorage.setItem(consentKey(key), JSON.stringify(need)); } catch(_){} }
+
+function askConsent(title, need){
+  return new Promise((resolve)=>{
+    const box=document.createElement("div"); box.className="consent";
+    const h=document.createElement("h2"); h.textContent=title;
+    const p=document.createElement("div"); p.textContent="Este programa pide permiso para:";
+    const ul=document.createElement("ul");
+    for (const c of need.caps){
+      const li=document.createElement("li"); li.textContent=ASK[c];
+      if (c==="NET"){
+        const sub=document.createElement("ul");
+        for (const u of need.net){ const s=document.createElement("li"); const code=document.createElement("code"); code.textContent=u; s.appendChild(code); sub.appendChild(s); }
+        if (!need.net.length){ const s=document.createElement("li"); s.textContent="(ninguna URL permitida)"; sub.appendChild(s); }
+        li.appendChild(sub);
+      }
+      ul.appendChild(li);
+    }
+    const actions=document.createElement("div"); actions.className="actions";
+    const ok=document.createElement("button"); ok.type="button"; ok.textContent="Permitir y ejecutar";
+    ok.addEventListener("click",()=>resolve());
+    actions.appendChild(ok);
+    box.append(h, p, ul, actions);
+    root.replaceChildren(box);
+    ok.focus();
+  });
+}
+
+// ── Carga y ejecución ───────────────────────────────────────────────────────
+let current=null;    // { key, rt, disk }
+
+async function load(msg){
+  if (current) return fail("este runner ya está ejecutando un programa");
+  const { key, title, ir, capabilities, trusted } = msg;
+  if (typeof key!=="string" || !/^[a-z0-9-]+\/[a-z0-9-]+$/.test(key) || !ir) return fail("mensaje de carga inválido");
+  const need=sensitive(capabilities);
+  if (!trusted && need.caps.length && !granted(key, need)){
+    await askConsent(title || key, need);
+    grant(key, need);
+  }
+  const onTrace=(line)=>post({ type:"trace", line });
+  try {
+    const disk=openStardustDisk("stardust-run:"+key);
+    root.replaceChildren();
+    const rt=createStardustRuntime({ source: JSON.stringify(ir), rootEl: root, onTrace, mirror:(engine)=>disk.mirror(engine) });
+    current={ key, rt, disk };
+    (await disk.mount(rt.engine)).forEach(onTrace);
+    await rt.start();
+    post({ type:"started" });
+  } catch (e){
+    fail("No se pudo ejecutar el programa:\n"+errText(e));
+  }
+}
+
+function applyTheme(theme){
+  if (theme==="light" || theme==="dark") document.documentElement.dataset.theme=theme;
+  else delete document.documentElement.dataset.theme;
+}
+
+window.addEventListener("message", async (event)=>{
+  if (event.origin!==PARENT_ORIGIN || event.source!==window.parent) return;
+  const msg=event.data || {};
+  if (msg.type==="load"){ applyTheme(msg.theme); await load(msg); }
+  else if (msg.type==="theme") applyTheme(msg.theme);
+  else if (msg.type==="drop" && typeof msg.key==="string"){
+    try { localStorage.removeItem(consentKey(msg.key)); } catch(_){}
+    await dropStardustDisk("stardust-run:"+msg.key);
+    post({ type:"dropped", key: msg.key });
+  }
+});
+
+post({ type:"ready" });
+</script>
+</body>
+</html>

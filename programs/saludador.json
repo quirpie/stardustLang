@@ -1,0 +1,19 @@
+{
+  "program": "saludador",
+  "entry": "Saludador",
+  "actors": [
+    {
+      "name": "Saludador",
+      "capabilities": [],
+      "on_message": {
+        "bind": "m",
+        "reply_to": "quien",
+        "body": [
+          { "op": "MATH", "target": "saludo", "operator": "+", "left": "Hola, ", "right": { "field": "nombre", "from": { "var": "m" } } },
+          { "op": "MATH", "target": "saludo", "operator": "+", "left": { "var": "saludo" }, "right": "! (respondido por el nodo remoto)" },
+          { "op": "SEND", "to": { "var": "quien" }, "value": { "record": { "kind": "saludo", "texto": { "var": "saludo" } } } }
+        ]
+      }
+    }
+  ]
+}

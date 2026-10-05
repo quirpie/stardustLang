@@ -1,0 +1,27 @@
+{
+  "program": "cliente",
+  "entry": "Actor_IO",
+  "actors": [
+    {
+      "name": "Actor_IO",
+      "capabilities": ["IO_STREAM"],
+      "on_start": [
+        { "op": "IO_STREAM", "mode": "out", "prompt": "== Cliente SIN permiso: intenta llamar a geometria/Areas ==" },
+        { "op": "IO_STREAM", "mode": "in", "target": "base", "prompt": "Base: " },
+        { "op": "IO_STREAM", "mode": "in", "target": "altura", "prompt": "Altura: " },
+        {
+          "op": "SEND",
+          "to": "geometria/Areas",
+          "cap": "token-invalido",
+          "value": { "record": { "base": { "var": "base" }, "altura": { "var": "altura" } } }
+        }
+      ],
+      "on_message": {
+        "bind": "resp",
+        "body": [
+          { "op": "IO_STREAM", "mode": "out", "prompt": "Área = ", "value": { "field": "area", "from": { "var": "resp" } } }
+        ]
+      }
+    }
+  ]
+}
